@@ -9,5 +9,8 @@ _default:
 # sh: 1: [[: not found エラーを回避するため、レシピの実行シェルを bash に変更します。
 set shell := ["bash", "-cu"]
 
-build:
-    docker-compose build
+up:
+  @docker compose --env-file .env.example up -d --build
+
+down:
+  @docker compose --env-file .env.example down
