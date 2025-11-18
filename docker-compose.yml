@@ -85,8 +85,7 @@ services:
       - ./api:/app:rw
     command: ["yarn","start"]
     depends_on:
-      mysql:
-        condition: service_healthy
+      - mysql
     networks:
       - default
 
