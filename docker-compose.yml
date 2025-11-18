@@ -1,7 +1,6 @@
 services:
  # 開発用 Vite
   vite:
-    image: oruca-vite:latest
     build:
       context: vite
       dockerfile: Dockerfile
@@ -17,7 +16,6 @@ services:
 
   # 本番用 Nginx
   web:
-    image: oruca-web:latest
     build:
       context: web
       dockerfile: Dockerfile
@@ -39,7 +37,6 @@ services:
 
   # mysql
   mysql:
-    image: oruca-mysql:latest
     build:
       context: mysql
     container_name: oruca-mysql
@@ -67,7 +64,6 @@ services:
       - default
 
   api:
-    image: oruca-api:latest
     build:
       context: ./api
       dockerfile: Dockerfile
@@ -89,7 +85,6 @@ services:
       - default
 
   nfc:
-    image: oruca-nfc:latest
     container_name: oruca-nfc
     build:
       context: nfc
