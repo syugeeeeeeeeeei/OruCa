@@ -101,8 +101,7 @@ services:
       - TZ=Asia/Tokyo
     command: ["python","main.py"]
     depends_on:
-      mysql: # nfcサービスもmysqlに依存する場合
-        condition: service_healthy
+      - api
     devices:
       - "/dev/bus/usb:/dev/bus/usb"
     networks:
