@@ -3,7 +3,7 @@ services:
  # 開発用 Vite
   vite:
     build:
-      context: ./vite
+      context: vite
       dockerfile: Dockerfile
     container_name: oruca-vite
     volumes:
@@ -21,6 +21,7 @@ services:
   web:
     build:
       context: web
+      dockerfile: Dockerfile
     container_name: oruca-web
     # ports: # リバースプロキシ経由のためコメントアウト
       # - "4040:80"
