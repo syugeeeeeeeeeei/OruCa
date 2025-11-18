@@ -14,8 +14,6 @@ services:
     restart: unless-stopped
     networks:
       - default 
-    profiles:
-      - "dev"
 
   # 本番用 Nginx
   web:
@@ -33,8 +31,6 @@ services:
       - default
       - fukaya-lab-network # 👈 共通ネットワークに参加
     restart: unless-stopped
-    profiles:
-      - "prod"
     labels:
       caddy: http://oruca.fukaya-sus.lab
       caddy.reverse_proxy: "{{upstreams 80}}"
