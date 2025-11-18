@@ -10,7 +10,7 @@ _default:
 set shell := ["bash", "-cu"]
 
 up:
-  @docker compose --env-file .env.example up -d --build
+  @docker compose -f docker-compose.yml -f compose.dev.yml --env-file .env.example up -d --build
 
 down:
-  @docker compose --env-file .env.example down
+  @docker compose -f docker-compose.yml -f compose.dev.yml --env-file .env.example down

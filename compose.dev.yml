@@ -1,0 +1,32 @@
+# include ブロックは削除します
+services:
+  # 開発用 Vite (本番には存在しないサービスを追加)
+  vite:
+    build:
+      context: vite
+      dockerfile: Dockerfile
+      target: dev
+    container_name: oruca-vite
+    volumes:
+      - ./vite:/app:rw
+      - /app/node_modules
+    ports:
+      - "4000:4000"
+    restart: no
+    networks:
+      - default 
+
+  # API (Dev Mode Override)
+  api:
+    build:
+      target: dev             # Devステージに変更
+    volumes:
+      - ./api:/app:rw         # ソースコードをマウント
+      - /app/node_modules     # コンテナ内のnode_modulesを守る
+    command: ["yarn", "start"] # devコマンド (ts-node-dev)
+    restart: no
+
+  # NFC (Dev Mode Override)
+  nfc:
+    volumes:
+      - ./nfc:/app:rw         # Pythonスクリプトをマウント

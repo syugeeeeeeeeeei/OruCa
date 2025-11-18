@@ -1,41 +1,21 @@
 services:
- # 開発用 Vite
-  vite:
-    build:
-      context: vite
-      dockerfile: Dockerfile
-    container_name: oruca-vite
-    volumes:
-      - ./vite:/app:rw
-    ports: # 開発時に直接アクセスしたい場合はコメント解除
-      - "4000:4000"
-    command: ["tail","-f","/dev/null"]
-    restart: unless-stopped
-    networks:
-      - default 
-
-  # 本番用 Nginx
+  # 本番用 Nginx (ビルド機能付き)
   web:
     build:
-      context: web
-      dockerfile: Dockerfile
+      context: .              # プロジェクトルートを指定 (vite/ と web/ 両方にアクセスするため)
+      dockerfile: web/Dockerfile
     container_name: oruca-web
-    # ports: # リバースプロキシ経由のためコメントアウト
-      # - "4040:80"
-    volumes:
-      - ./vite/dist:/usr/share/nginx/html:ro
+    restart: unless-stopped
     depends_on:
-      - api # apiがmysqlに依存するため、これでmysql起動後になる
+      - api
     networks:
       - default
-      - fukaya-lab-network # 👈 共通ネットワークに参加
-    restart: unless-stopped
+      - fukaya-lab-network
     labels:
       caddy: http://oruca.fukaya-sus.lab
       caddy.reverse_proxy: "{{upstreams 80}}"
-      # caddy.tls: "internal"
 
-  # mysql
+  # MySQL
   mysql:
     build:
       context: mysql
@@ -50,10 +30,8 @@ services:
       - SYS_NICE
     volumes:
       - ./mysql/data/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - mysql_data:/var/lib/mysql # 👈 ボリュームを使用
+      - mysql_data:/var/lib/mysql
       - ./mysql/backups:/backups
-    # ports: # 外部から直接DBにアクセスしない場合はコメントアウト推奨
-      # - "3306:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -63,10 +41,12 @@ services:
     networks:
       - default
 
+  # API (Production Mode)
   api:
     build:
       context: ./api
       dockerfile: Dockerfile
+      target: prod            # Prodステージを使用
     container_name: oruca-api
     restart: unless-stopped
     environment:
@@ -76,22 +56,20 @@ services:
       SLACK_BOT_TOKEN : ${SLACK_BOT_TOKEN}
       SLACK_CHANNEL_ID : ${SLACK_CHANNEL_ID}
       TZ: Asia/Tokyo
-    volumes:
-      - ./api:/app:rw
-    command: ["yarn","start"]
+    # volumes: 削除 (コードはイメージ内にCOPY済み)
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     networks:
       - default
 
+  # NFC
   nfc:
     container_name: oruca-nfc
     build:
       context: nfc
     init: true
     restart: unless-stopped
-    volumes:
-      - ./nfc:/app:rw
     environment:
       - TZ=Asia/Tokyo
     command: ["python","main.py"]
@@ -102,7 +80,6 @@ services:
     networks:
       - default
 
-
 networks:
   default : 
     driver: bridge
@@ -110,6 +87,5 @@ networks:
     external: true
     name: fukaya-lab-network
 
-# [追加] ボリュームを定義 (自動作成)
 volumes:
   mysql_data:
