@@ -113,7 +113,6 @@ services:
 networks:
   default : 
     driver: bridge
-  # [追加] 共通ネットワークを external として定義
   fukaya-lab-network:
     external: true
     name: fukaya-lab-network
