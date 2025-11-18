@@ -19,9 +19,13 @@ FROM base AS builder
 RUN yarn install --frozen-lockfile
 # ソースコードをコピーしてビルド
 COPY . .
-# TypeScriptをビルド (distディレクトリに出力される設定を想定)
-# package.jsonにbuildスクリプトがない場合、npx tscを直接実行
-RUN npx tsc
+
+# 1. TypeScriptをビルド (distディレクトリに出力)
+RUN npx tsc --outDir ./dist
+
+# 2. パスエイリアス (@src/...) を相対パスに置換するツールを導入・実行
+RUN npm install -g tsc-alias
+RUN npx tsc-alias -p tsconfig.json --outDir ./dist
 
 # --- Production Stage (本番実行用) ---
 FROM node:20-alpine AS prod
@@ -32,11 +36,11 @@ COPY package.json yarn.lock ./
 # 本番用依存関係のみインストール
 RUN yarn install --production --frozen-lockfile
 
-# Builderステージからビルド成果物(dist)と必要なファイルをコピー
+# Builderステージからビルド成果物(dist)のみをコピー
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/config.ts ./dist/config.js 
-# ※config.tsの扱いによるが、tscでjsになっているはず。構成に合わせて調整
 
+# 必要であれば環境変数設定など
 EXPOSE 3000
-# コンパイル済みのJSを実行
+
+# コンパイル済みのJSを実行 (パス解決済みなのでnodeコマンドで動作します)
 CMD ["node", "dist/server.js"]
