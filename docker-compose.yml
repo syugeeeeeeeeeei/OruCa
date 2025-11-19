@@ -18,7 +18,7 @@ services:
   # MySQL
   mysql:
     build:
-      context: mysql
+      context: compose/mysql
     container_name: oruca-mysql
     restart: unless-stopped
     environment:
@@ -29,9 +29,9 @@ services:
     cap_add:
       - SYS_NICE
     volumes:
-      - ./mysql/data/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./compose/mysql/data/init.sql:/docker-entrypoint-initdb.d/init.sql
       - mysql_data:/var/lib/mysql
-      - ./mysql/backups:/backups
+      - ./compose/mysql/backups:/backups
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -44,7 +44,7 @@ services:
   # API (Production Mode)
   api:
     build:
-      context: ./api
+      context: compose/api
       dockerfile: Dockerfile
       target: prod            # Prodステージを使用
     container_name: oruca-api
@@ -67,7 +67,7 @@ services:
   nfc:
     container_name: oruca-nfc
     build:
-      context: nfc
+      context: compose/nfc
     init: true
     restart: unless-stopped
     environment:

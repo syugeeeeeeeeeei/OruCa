@@ -3,12 +3,12 @@ services:
   # 開発用 Vite (本番には存在しないサービスを追加)
   vite:
     build:
-      context: vite
+      context: compose/vite
       dockerfile: Dockerfile
       target: dev
     container_name: oruca-vite
     volumes:
-      - ./vite:/app:rw
+      - ./compose/vite:/app:rw
       - /app/node_modules
     ports:
       - "4000:4000"
@@ -21,7 +21,7 @@ services:
     build:
       target: dev             # Devステージに変更
     volumes:
-      - ./api:/app:rw         # ソースコードをマウント
+      - ./compose/api:/app:rw         # ソースコードをマウント
       - /app/node_modules     # コンテナ内のnode_modulesを守る
     command: ["yarn", "start"] # devコマンド (ts-node-dev)
     restart: no
@@ -29,4 +29,4 @@ services:
   # NFC (Dev Mode Override)
   nfc:
     volumes:
-      - ./nfc:/app:rw         # Pythonスクリプトをマウント
+      - ./compose/nfc:/app:rw         # Pythonスクリプトをマウント
