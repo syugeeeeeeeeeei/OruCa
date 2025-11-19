@@ -9,8 +9,9 @@ USER="${MYSQL_USER:-root}"
 PASS="${MYSQL_PASSWORD:-root}"
 DB_NAME="${MYSQL_DATABASE:-OruCa_DB}"
 
-# ホストIP取得（簡易的: コンテナのIPを表示）
-HOST_IP=$(ip route get 1 | awk '{print $7;exit}')
+# 表示用のホスト名設定
+# 環境変数 ACCESSIBLE_HOST が設定されていればそれを使い、なければ 'localhost' を使用
+DISPLAY_HOST="${ACCESSIBLE_HOST:-localhost}"
 
 show_header() {
     clear
@@ -19,7 +20,7 @@ show_header() {
     echo "========================================"
     echo "Database: $DB_NAME"
     echo "Host: $HOST"
-    echo "Container IP: $HOST_IP"
+    echo "Access Host: $DISPLAY_HOST"
     echo "----------------------------------------"
 }
 
@@ -83,8 +84,8 @@ do_restore() {
 do_web_server() {
     echo "🌐 Starting Web Server (Download & Upload)..."
     echo "-----------------------------------------------------"
-    echo "📥 Download List : http://${HOST_IP}:8081/"
-    echo "⬆️  Upload Page   : http://${HOST_IP}:8081/upload"
+    echo "📥 Download List : http://${DISPLAY_HOST}:8081/"
+    echo "⬆️  Upload Page   : http://${DISPLAY_HOST}:8081/upload"
     echo "-----------------------------------------------------"
     echo "   (Press Ctrl+C to stop the server and return to menu)"
     
@@ -97,10 +98,10 @@ do_web_server() {
 while true; do
     show_header
     echo "Please select an option:"
-    echo "1) 💾 Create Backup"
-    echo "2) 🔄 Restore Backup"
-    echo "3) 🌐 Start File Server (Download / Upload)"
-    echo "4) 🚪 Exit"
+    echo "1)  💾  Create Backup"
+    echo "2)  🔄  Restore Backup"
+    echo "3)  🌐  Start File Server (Download / Upload)"
+    echo "4)  🚪  Exit"
     echo ""
     read -p "Enter choice [1-4]: " choice
 

@@ -66,6 +66,7 @@ services:
       MYSQL_USER : ${MYSQL_USER}
       MYSQL_PASSWORD : ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD : ${MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Tokyo
     cap_add:
       - SYS_NICE
     volumes:
@@ -95,6 +96,7 @@ services:
       MYSQL_USER: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       TZ: Asia/Tokyo
+      ACCESSIBLE_HOST: ${ACCESSIBLE_HOST:-localhost}
     volumes:
       - database_backups:/backups
     ports:
