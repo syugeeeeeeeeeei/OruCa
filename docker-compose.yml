@@ -2,8 +2,8 @@ services:
   # 本番用 Nginx (ビルド機能付き)
   web:
     build:
-      context: compose/web              # プロジェクトルートを指定 (vite/ と web/ 両方にアクセスするため)
-      dockerfile: Dockerfile
+      context: compose              # プロジェクトルートを指定 (vite/ と web/ 両方にアクセスするため)
+      dockerfile: web/Dockerfile
     container_name: oruca-web
     restart: unless-stopped
     depends_on:
