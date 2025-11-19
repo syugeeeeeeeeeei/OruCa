@@ -15,32 +15,6 @@ services:
       caddy: http://oruca.fukaya-sus.lab
       caddy.reverse_proxy: "{{upstreams 80}}"
 
-  # MySQL
-  mysql:
-    build:
-      context: compose/mysql
-    container_name: oruca-mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_DATABASE : ${MYSQL_DATABASE}
-      MYSQL_USER : ${MYSQL_USER}
-      MYSQL_PASSWORD : ${MYSQL_PASSWORD}
-      MYSQL_ROOT_PASSWORD : ${MYSQL_ROOT_PASSWORD}
-    cap_add:
-      - SYS_NICE
-    volumes:
-      - ./compose/mysql/data/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - mysql_data:/var/lib/mysql
-      - ./compose/mysql/backups:/backups
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      retries: 3
-      start_period: 10s
-      timeout: 10s
-    networks:
-      - default
-
   # API (Production Mode)
   api:
     build:
@@ -80,6 +54,57 @@ services:
     networks:
       - default
 
+  # MySQL (修正: バックアップのマウントを削除)
+  mysql:
+    build:
+      context: compose/mysql
+    container_name: oruca-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE : ${MYSQL_DATABASE}
+      MYSQL_USER : ${MYSQL_USER}
+      MYSQL_PASSWORD : ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD : ${MYSQL_ROOT_PASSWORD}
+    cap_add:
+      - SYS_NICE
+    volumes:
+      - ./compose/mysql/data/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - mysql_data:/var/lib/mysql
+      # 削除: - ./compose/mysql/backups:/backups
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 3
+      start_period: 10s
+      timeout: 10s
+    networks:
+      - default
+
+  # Backup Utility
+  backup-util:
+    container_name: oruca-backup-util
+    build:
+      context: compose/backup
+    restart: "no"
+    environment:
+      # MySQLコンテナへ接続するための情報
+      MYSQL_HOST: oruca-mysql
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      # root権限でバックアップ/リストアを行うため root を使用推奨
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Tokyo
+    volumes:
+      - database_backups:/backups
+    ports:
+      - "8081:8081"
+    networks:
+      - default
+    depends_on:
+      - mysql
+    tty: true          # 追加: TUIを表示するために必要
+    stdin_open: true   # 追加: 入力を受け付けるために必要
+
 networks:
   default : 
     driver: bridge
@@ -89,3 +114,4 @@ networks:
 
 volumes:
   mysql_data:
+  database_backups:
