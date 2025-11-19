@@ -2,8 +2,8 @@ services:
   # 本番用 Nginx (ビルド機能付き)
   web:
     build:
-      context: .              # プロジェクトルートを指定 (vite/ と web/ 両方にアクセスするため)
-      dockerfile: web/Dockerfile
+      context: compose/web              # プロジェクトルートを指定 (vite/ と web/ 両方にアクセスするため)
+      dockerfile: Dockerfile
     container_name: oruca-web
     restart: unless-stopped
     depends_on:
@@ -39,9 +39,10 @@ services:
 
   # NFC
   nfc:
-    container_name: oruca-nfc
     build:
       context: compose/nfc
+      dockerfile: Dockerfile
+    container_name: oruca-nfc
     init: true
     restart: unless-stopped
     environment:
