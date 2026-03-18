@@ -1,113 +1,128 @@
-# OruCa - FeliCa在室管理システム
+# OruCa
 
-OruCaは、FeliCaカードを利用して研究室のメンバーの在室状況をリアルタイムに管理・表示するウェブアプリケーションです。
+OruCa は FeliCa カードを使って研究室メンバーの在室状況を記録・表示する Web アプリです。  
+このリポジトリは Lab-Core v3 上でそのまま登録・起動できる構成に合わせています。
 
-## 📝 事前準備
+## Lab-Core 登録値
 
-アプリケーションをセットアップする前に、お使いの環境に以下のツールがインストールされていることを確認してください。
+- `composePath`: `docker-compose.yml`
+- `publicServiceName`: `web`
+- `publicPort`: `80`
+- `mode`: `standard`
+- `deviceRequirements`: `["/dev/bus/usb"]`
+- `keepVolumesOnRebuild`: `true`
 
-* **Git:** リポジトリのクローンに必要です。
-* **make:** セットアップコマンドの実行に必要です。
-* **Docker と Docker Compose:**
-    * **Linuxをお使いの場合:** Docker EngineとDocker Composeが利用可能であること。
-    * **Windows (WSL)をお使いの場合:** WindowsにDocker Desktopがインストールされ、WSL 2連携が有効になっていること。
-* **FeliCaカードリーダー と関連セットアップ (WSLユーザー向け):**
-    * FeliCaカードリーダーがPCに接続されていること。
-    * Windows側で `usbipd-win` がインストールされ、設定済みであること。(詳細は `usbipd-win` の[公式ドキュメント](https://github.com/dorssel/usbipd-win)を参照してください。)
+登録テンプレート:
 
-ご利用のOSやディストリビューションに応じたインストール方法は、各ツールの公式サイト等でご確認ください。
+```json
+{
+  "name": "oruca",
+  "description": "FeliCa 在室管理システム",
+  "repositoryUrl": "https://github.com/<org>/<repo>",
+  "defaultBranch": "main",
+  "composePath": "docker-compose.yml",
+  "publicServiceName": "web",
+  "publicPort": 80,
+  "hostname": "oruca.fukaya-sus.lab",
+  "mode": "standard",
+  "keepVolumesOnRebuild": true,
+  "deviceRequirements": ["/dev/bus/usb"]
+}
+```
 
-## 🚀 セットアップと起動
+## リポジトリ構成
 
-1.  **リポジトリのクローン:**
-    ```bash
-    git clone [https://github.com/your-username/OruCa.git](https://github.com/your-username/OruCa.git)
-    cd OruCa
-    ```
+```text
+OruCa/
+├── docker-compose.yml
+├── .dockerignore
+├── .env.example
+├── README.md
+├── api/
+├── nfc/
+├── vite/
+└── web/
+```
 
-2.  **環境変数の設定:**
-    `dev.env` ファイルをコピーして `.env` ファイルを作成し、必要な情報を編集します。
-    ```bash
-    cp dev.env .env
-    # nano .env や vim .env 等で編集してください
-    ```
-    最低限、MySQLのパスワード (`MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`) を設定してください。
+## 起動方法
 
-3.  **USBデバイスの接続 (WSLユーザー向け):**
-    NFCカードリーダーをWSLに接続します。
-    ```bash
-    make attach-usb
-    ```
-    このコマンドは内部で `usb-wsl-attach.ps1` を実行します。
+1. リポジトリを clone します。
 
-4.  **アプリケーションの初期化と起動:**
+```bash
+git clone https://github.com/<org>/<repo>.git
+cd OruCa
+```
 
-    * **開発環境のセットアップ (初回や開発時):**
-        `vite`コンテナ（開発サーバー）と関連サービス（API、データベース等）を起動します。
-        ```bash
-        make init-dev
-        ```
-        完了後、フロントエンド開発サーバーは `http://localhost:4000` (または `ACCESSIBLE_HOST` で指定したホストのポート4000) でアクセス可能になります。
+2. 必要なら `.env.example` を `.env` にコピーして値を調整します。
 
-    * **本番環境へのデプロイ (開発終了後や本番運用時):**
-        フロントエンドアプリケーションをビルドし、`web`コンテナ（本番用Webサーバー）を含む全ての関連サービスを起動します。
-        ```bash
-        make init-prod
-        ```
+```bash
+cp .env.example .env
+```
 
-        このコマンドは、デフォルトでは外部にポートを公開しません（リバースプロキシ経由などを想定）。<br>
-		特定のポートで公開したい場合は、`port`引数を指定してください。
-        
-		```bash
-        make init-prod port=8080
-        ```
-        完了後、`http://<ACCESSIBLE_HOSTで指定したホスト>:<指定したポート>` (例: `http://localhost:8080`) でアクセスできます。`port`引数を指定しない場合、アクセス方法はMakefileの出力やリバースプロキシの設定に依存します。
+3. 本番構成を起動します。
 
-    その他の `make` コマンドについては、[Makefileコマンド一覧](#makefileコマンド一覧)を参照してください。
+```bash
+docker compose -f docker-compose.yml up -d --build
+```
 
-## ✨ 主な特徴
+Lab-Core では `web` サービスが内部で `80` 番ポートを listen し、Nginx から API にプロキシされます。
 
-* FeliCaカードによる簡単な入退室記録
-* リアルタイムな在室状況のウェブ表示
-* Slackへの入退室通知 (設定時)
-* 管理者向けユーザー情報編集機能
+## 環境変数
 
-## 🛠️ 技術スタック
+必須ではない場合でも、必要に応じて `.env` または compose 実行環境で上書きできます。
 
-* **フロントエンド:** Vite, React, TypeScript, Chakra UI
-* **バックエンド:** Node.js, Express, TypeScript, WebSocket
-* **データベース:** MySQL
-* **NFC連携:** Python
-* **インフラ:** Docker, Docker Compose
+| 変数名 | 必須 | 既定値 | 用途 |
+| --- | --- | --- | --- |
+| `MYSQL_DATABASE` | 任意 | `OruCa_DB` | MySQL データベース名 |
+| `MYSQL_USER` | 任意 | `OruCa_user` | MySQL ユーザー名 |
+| `MYSQL_PASSWORD` | 任意 | `OruCa_user_pass` | MySQL ユーザーパスワード |
+| `MYSQL_ROOT_PASSWORD` | 任意 | `root` | MySQL root パスワード |
+| `APPDATA_ROOT` | 任意 | `../../appdata/oruca` | 永続データ保存先 |
+| `SLACK_BOT_TOKEN` | 任意 | 空 | Slack 通知トークン |
+| `SLACK_CHANNEL_ID` | 任意 | 空 | Slack 通知先チャンネル |
 
-## 使い方
+Slack 通知は未設定でもアプリは起動します。  
+永続設定をソース外に置きたい場合は `${APPDATA_ROOT}/config/api.env` を作成すると、API コンテナ起動時に自動で読み込みます。
 
-* **在室状況確認:**
-    * 開発環境 (`make init-dev`): `http://localhost:4000`
-    * 本番環境 (`make init-prod port=<ポート番号>`): `http://<ホスト名>:<ポート番号>`
-* **入退室:** FeliCaカードリーダーにカードをタッチします。
-* **管理者ページ:** 上記URLの末尾に `/admin` を追記してアクセス。認証情報は `mysql/data/init.sql` 内の `admin_pass` (`fukaya_lab`) と事前にNFCで登録したIDを使用します。
+## 永続データの保存先
 
-## 📖 Makefileコマンド一覧
+- MySQL データ: `${APPDATA_ROOT}/mysql`
+- バックアップ保存先: `${APPDATA_ROOT}/backups`
+- 永続設定ファイル: `${APPDATA_ROOT}/config/api.env`
 
-`make <ターゲット> [引数]` の形式でコマンドを実行します。
+`APPDATA_ROOT` の既定値は Lab-Core の `runtime/apps/<app>` から見て `../../appdata/oruca` です。  
+これにより再ビルド後も DB データと設定を保持できます。
 
-| ターゲット          | 説明                                                                                                | 引数 (例)                                                              |
-| ------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `help`              | ヘルプメッセージを表示します。                                                                        |                                                                          |
-| `init-dev`          | 開発用環境を初期化し、viteコンテナ（開発サーバー）と関連サービスを起動します。                          | `ACCESSIBLE_HOST=your.ip.address`                                        |
-| `init-prod`         | フロントエンドをビルドし、本番環境サービス（web, api等）を起動します。 `port`引数でポート指定可能。 | `ACCESSIBLE_HOST=your.ip.address` <br> `port=8080`                       |
-| `up`                | 指定されたプロファイルとサービスのコンテナをフォアグラウンドでビルド・起動します。                      | `p="dev"` <br> `p="prod" t="api"`                                        |
-| `up-d`              | 指定されたプロファイルとサービスのコンテナをデタッチモードでビルド・起動します。                        | `p="dev"` <br> `p="prod"`                                                |
-| `build`             | 特定のサービスをビルドし、デタッチモードで起動します。                                                  | `t=api`                                                                  |
-| `save-backup`       | MySQLデータベースのバックアップを `mysql/backups/YYYYMMDD-HHMMSS/` に保存します。                       |                                                                          |
-| `restore-backup`    | 指定されたバックアップ(`backup_id`で指定)からMySQLデータベースをリストアします。                                 | `backup_id=YYYYMMDD-HHMMSS`                                            |
-| `cache-clear`       | Dockerビルダーのキャッシュを削除します。                                                              |                                                                          |
-| `attach-usb`        | (WSLユーザー向け) USB FeliCaリーダーをWSLにアタッチします。                                           |                                                                          |
+## デバイス要件
 
-**引数の説明:**
-* `p="<プロファイル名>"`: Docker Composeのプロファイルを指定します (例: `dev`, `prod`)。複数指定も可能です (例: `p="dev prod"` )。
-* `t=<サービス名>`: Docker Composeの特定のサービス名を指定します (例: `vite`, `api`, `web`)。
-* `ACCESSIBLE_HOST=<IPまたはホスト名>`: `init-dev` や `init-prod` 実行時に表示されるアクセスURLのホスト部分を指定します。
-* `port=<ポート番号>`: `init-prod` 実行時に `web` サービスを外部公開する際のポート番号を指定します。指定しない場合は公開されません。
-* `backup_id=<ID(タイムスタンプ)>`: `restore-backup` 実行時にリストアするバックアップのディレクトリ名を指定します (例: `YYYYMMDD-HHMMSS`)。
+このアプリは NFC リーダーのために USB デバイスアクセスが必要です。
+
+- compose 側: `devices: ["/dev/bus/usb:/dev/bus/usb"]`
+- Lab-Core 登録値: `deviceRequirements: ["/dev/bus/usb"]`
+
+WSL 環境では必要に応じて `usb-wsl-attach.ps1` を使って USB を接続してください。
+
+## 障害時の確認コマンド
+
+```bash
+docker compose -f docker-compose.yml config --services
+docker compose -f docker-compose.yml up -d --build
+docker compose -f docker-compose.yml logs --no-color --tail 200
+docker compose -f docker-compose.yml restart
+docker compose -f docker-compose.yml down
+```
+
+個別サービスのログ例:
+
+```bash
+docker compose -f docker-compose.yml logs --no-color --tail 200 web
+docker compose -f docker-compose.yml logs --no-color --tail 200 api
+docker compose -f docker-compose.yml logs --no-color --tail 200 nfc
+docker compose -f docker-compose.yml logs --no-color --tail 200 mysql
+```
+
+## 補足
+
+- `web` は `/health` を返すため、ヘルスチェック可能です。
+- API と NFC は compose のサービス名 `api`, `mysql` を使って接続するため、固定コンテナ名に依存しません。
+- ログは各サービスとも標準出力 / 標準エラーに出力されるため、Lab-Core のログ画面から確認できます。

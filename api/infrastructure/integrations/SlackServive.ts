@@ -1,9 +1,14 @@
 // SlackService.ts
-import { SLACK_BOT_TOKEN, SLACK_CHANNEL_ID } from "@src/config";
+import { SLACK_BOT_TOKEN, SLACK_CHANNEL_ID, SLACK_ENABLED } from "@src/config";
 
 export class SlackService {
 	// Slackにメッセージを投稿するメソッド
 	public async postMessage(message: string): Promise<void> {
+		if (!SLACK_ENABLED) {
+			console.log("Slack通知は未設定のためスキップしました。");
+			return;
+		}
+
 		try {
 			const response = await fetch('https://slack.com/api/chat.postMessage', {
 				method: 'POST',

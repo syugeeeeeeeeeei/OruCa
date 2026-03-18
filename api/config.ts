@@ -1,6 +1,9 @@
 import dotenv from "dotenv";
 import mysql from "mysql2";
+
+const runtimeConfigDir = process.env.RUNTIME_CONFIG_DIR ?? "/app/runtime-config";
 dotenv.config();
+dotenv.config({ path: `${runtimeConfigDir}/api.env`, override: true });
 
 // 型安全な取得関数
 function getEnv(name: string): string {
@@ -9,6 +12,10 @@ function getEnv(name: string): string {
 		throw new Error(`環境変数 ${name} が設定されていません。`);
 	}
 	return value;
+}
+
+function getEnvOptional(name: string, fallback = ""): string {
+	return process.env[name] ?? fallback;
 }
 
 interface IServerConfig{
@@ -28,12 +35,12 @@ export interface IDBConfig extends mysql.PoolOptions {
 }
 
 export const SERVER_CONFIG:IServerConfig = {
-	port:3000,
-	host:"oruca-api"
+	port:Number(getEnvOptional("PORT", "3000")),
+	host:getEnvOptional("HOST", "0.0.0.0")
 }
 
 export const DB_CONFIG:IDBConfig = {
-	host: 'oruca-mysql', // Docker Compose内でのサービス名を使用
+	host: getEnvOptional("DB_HOST", "mysql"),
 	user: getEnv("MYSQL_USER"),
 	password: getEnv("MYSQL_PASSWORD"),
 	database: getEnv("MYSQL_DATABASE"),
@@ -59,6 +66,6 @@ export type DBresult = {
 	"noHead": [mysql.RowDataPacket[]];
 }
 
-
-export const SLACK_BOT_TOKEN = getEnv("SLACK_BOT_TOKEN"); // 例: xoxb-1234567890-0987654321-ABCDEF123456
-export const SLACK_CHANNEL_ID = getEnv("SLACK_CHANNEL_ID"); // 例: C1234567890
+export const SLACK_BOT_TOKEN = getEnvOptional("SLACK_BOT_TOKEN");
+export const SLACK_CHANNEL_ID = getEnvOptional("SLACK_CHANNEL_ID");
+export const SLACK_ENABLED = Boolean(SLACK_BOT_TOKEN && SLACK_CHANNEL_ID);

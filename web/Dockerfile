@@ -12,7 +12,9 @@ COPY vite/ .
 RUN yarn build
 
 # --- Production Stage (Nginxでの配信) ---
-FROM nginx:latest AS prod
+FROM nginx:1.27-alpine AS prod
+
+RUN apk add --no-cache wget
 
 # カスタムnginx設定をコピー (ビルドコンテキストはルート)
 COPY web/default.conf /etc/nginx/conf.d/default.conf

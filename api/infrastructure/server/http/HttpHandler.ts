@@ -18,6 +18,10 @@ export class HttpHandler {
 	}
 
 	private initializeHttpRoutes(app: express.Express) {
+		app.get("/health", (_req: express.Request, res: express.Response) => {
+			res.status(200).json({ status: "ok" });
+		});
+
 		// 💡 削除: app.post("/log/write", ... ) { ... } ルートを完全に削除
 		app.get("/echo", express.json(), async (req: express.Request, res: express.Response) => {
 			res.status(200).json("http(api) is connected\n");

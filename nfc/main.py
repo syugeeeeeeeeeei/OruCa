@@ -8,6 +8,7 @@ from nfc.tag.tt3 import BlockCode, ServiceCode
 from typing import cast
 import time
 import json
+import os
 from websocket import create_connection # 同期WebSocketクライアントライブラリ
 
 class NFCReaderPublisher:
@@ -15,14 +16,13 @@ class NFCReaderPublisher:
     # クラス定数と初期化
     # ----------------------------------------------------------------------
     SYSTEM_CODE = 0xFE00 # FeliCaのシステムコード
-    # APIサーバーが立てるWebSocketサーバーのURL
-    WS_SERVER_URL = "ws://oruca-api:3000/log/write" # APIサーバーのWebSocketエンドポイント
 
     def __init__(self):
+        self.ws_server_url = os.environ.get("API_WS_URL", "ws://api:3000/log/write")
         # カードが接続されたときにIDを一時的に保持するためのインスタンス変数
         # Noneでない場合のみ、on_release時にPub処理が実行されます。
         self._card_id_to_publish: str | None = None
-        print(f"NFCリーダーパブリッシャーを初期化しました。WS接続先: {self.WS_SERVER_URL}")
+        print(f"NFCリーダーパブリッシャーを初期化しました。WS接続先: {self.ws_server_url}")
 
     # ----------------------------------------------------------------------
     # 静的メソッド: 学生ID抽出関数
@@ -75,8 +75,8 @@ class NFCReaderPublisher:
         
         try:
             # 修正: websocket.create_connection を使って接続を確立
-            print(f"接続試行中... API WSサーバー: {self.WS_SERVER_URL}")
-            ws = create_connection(self.WS_SERVER_URL, timeout=5)
+            print(f"接続試行中... API WSサーバー: {self.ws_server_url}")
+            ws = create_connection(self.ws_server_url, timeout=5)
             ws.send(message)
             print(f"🟢 ID:{student_ID} をAPIサーバーに正常に発行しました。")
             ws.close()
