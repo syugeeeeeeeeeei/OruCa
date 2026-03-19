@@ -15,6 +15,12 @@ up:
 down:
   @docker compose -f docker-compose.yml -f compose.dev.yml --env-file .env.example down
 
+up-dev-debug:
+  @docker compose -f docker-compose.yml -f compose.dev.yml -f compose.debug.yml --env-file .env.example up -d --build
+
+up-prod:
+  @docker compose -f docker-compose.yml --env-file .env.example up -d --build
+
 # -----------------------------------------------------------------
 # 💾 Database Backup & Restore
 # -----------------------------------------------------------------
