@@ -31,7 +31,7 @@ services:
       - ${APPDATA_ROOT:-../../appdata/oruca}/mysql:/var/lib/mysql
       - ${APPDATA_ROOT:-../../appdata/oruca}/backups:/backups
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
       interval: 10s
       retries: 3
       start_period: 10s
