@@ -1,61 +1,88 @@
-// api/infrastructure/server/websocket/MessageHandler.ts
 import { DatabaseHandler } from "@infra/database/DataBaseHandler";
 import { SlackService } from "@infra/integrations/SlackServive";
-import { TWsMessage } from "@src/config";
+import { verifyAdminLogin } from "@infra/security/AdminAuth";
+import { CryptoService } from "@infra/security/CryptoService";
+import { BackupService } from "@infra/services/BackupService";
+import { TWsMessage, TWsProcessType } from "@src/config";
 import { sendWsMessage } from "@src/utils";
-import { createHash } from "crypto"; // 変更: crypto をインポート
 import { WebSocket, WebSocketServer } from "ws";
-import { z } from "zod"; // 'zod' のインポート
+import { z } from "zod";
 
-// (1) フロントエンド (Admin UI 等) からのペイロード用 (シンプル)
 const StudentIdPayload = z.object({
 	content: z.array(
 		z.object({
-			student_ID: z.string(),
+			student_ID: z.string().min(1),
 		})
-	)
+	),
 });
 
 const AuthPayload = z.object({
 	content: z.array(
 		z.object({
-			student_ID: z.string(),
+			student_ID: z.string().min(1),
 			password: z.string(),
 		})
-	)
+	),
 });
 
 const UpdateNamePayload = z.object({
 	content: z.array(
 		z.object({
-			student_ID: z.string(),
-			student_Name: z.string(),
+			student_ID: z.string().min(1),
+			student_Name: z.string().min(1),
 		})
-	)
+	),
 });
 
-// (2) NFCリーダー (main.py) からの 'log/write' ペイロード用 (ネスト)
 const LogWritePayload = z.object({
 	content: z.object({
-		student_ID: z.string(),
+		student_ID: z.string().min(1),
 	}),
 });
 
+const SlackUpdatePayload = z.object({
+	content: z.array(
+		z.object({
+			channelId: z.string().trim(),
+			botToken: z.string().optional(),
+		})
+	),
+});
+
+const BackupRestorePayload = z.object({
+	content: z.array(
+		z.object({
+			backupName: z.string().min(1),
+			confirmRestore: z.boolean(),
+		})
+	),
+});
 
 export class MessageHandler {
 	private wss: WebSocketServer;
 	private dbHandler: DatabaseHandler;
-	private slackService: SlackService; // SlackService をインスタンス化して保持
+	private slackService: SlackService;
+	private backupService: BackupService;
+	private adminSessionMap: WeakMap<WebSocket, boolean>;
 	public handlers: Record<string, (ws: WebSocket, data: TWsMessage) => Promise<void>>;
 
 	constructor(wss: WebSocketServer, dbHandler: DatabaseHandler) {
 		this.wss = wss;
 		this.dbHandler = dbHandler;
-		this.slackService = new SlackService(); // SlackService を初期化
+		this.slackService = new SlackService();
+		this.backupService = new BackupService();
+		this.adminSessionMap = new WeakMap();
 		this.handlers = this.initializeHandlers();
 	}
 
-	// ハンドラーを初期化
+	public onClientConnected(ws: WebSocket): void {
+		this.adminSessionMap.set(ws, false);
+	}
+
+	public onClientDisconnected(ws: WebSocket): void {
+		this.adminSessionMap.delete(ws);
+	}
+
 	private initializeHandlers(): Record<string, (ws: WebSocket, data: TWsMessage) => Promise<void>> {
 		return {
 			"log/fetch": this.handleFetchLogs.bind(this),
@@ -64,18 +91,49 @@ export class MessageHandler {
 			"user/update_name": this.handleUpdateName.bind(this),
 			"user/fetchToken": this.handleFetchToken.bind(this),
 			"user/delete": this.handleDeleteUser.bind(this),
+			"admin/slack/get": this.handleGetSlackSettings.bind(this),
+			"admin/slack/update": this.handleUpdateSlackSettings.bind(this),
+			"admin/backup/create": this.handleCreateBackup.bind(this),
+			"admin/backup/list": this.handleListBackups.bind(this),
+			"admin/backup/restore": this.handleRestoreBackup.bind(this),
 		};
 	}
 
-	// 全クライアントに現在のログをブロードキャスト
+	private getWsAuthState(ws: WebSocket): boolean {
+		if (!this.adminSessionMap.has(ws)) {
+			this.adminSessionMap.set(ws, false);
+		}
+		return this.adminSessionMap.get(ws) === true;
+	}
+
+	private setWsAuthState(ws: WebSocket, isAuthorized: boolean): void {
+		this.adminSessionMap.set(ws, isAuthorized);
+	}
+
+	private ensureAdminAuthorized(ws: WebSocket, requestedType: TWsProcessType): boolean {
+		if (this.getWsAuthState(ws)) {
+			return true;
+		}
+
+		sendWsMessage(ws, {
+			type: "unauthorized",
+			payload: {
+				result: false,
+				content: [{ requestedType }],
+				message: "unauthorized",
+			},
+		});
+		return false;
+	}
+
 	public async broadcastData(): Promise<void> {
 		try {
 			const logs = await this.fetchLogs();
 			const message = JSON.stringify({
 				type: "log/fetch",
-				payload: { result: true, content: logs, message: "ブロードキャストデータ" }
+				payload: { result: true, content: logs, message: "ブロードキャストデータ" },
 			});
-			this.wss.clients.forEach(client => {
+			this.wss.clients.forEach((client) => {
 				if (client.readyState === WebSocket.OPEN) {
 					client.send(message);
 				}
@@ -85,281 +143,414 @@ export class MessageHandler {
 		}
 	}
 
-	// ログを取得 (プライベートメソッドとして分離)
 	public async fetchLogs(): Promise<any[]> {
-		// 変更: DBハンドラから student_log_view を取得
 		return this.dbHandler.fetchStudentLogs();
 	}
 
-	// 'log/fetch' の処理
 	private async handleFetchLogs(ws: WebSocket, data: TWsMessage): Promise<void> {
 		try {
-			// 正常系ログを追加
 			console.log(`[REQ] type: ${data.type}`);
-
 			const logs = await this.fetchLogs();
 			sendWsMessage(ws, {
 				type: "log/fetch",
-				payload: { result: true, content: logs, message: "ログ取得成功" }
+				payload: { result: true, content: logs, message: "ログ取得成功" },
 			});
 		} catch (error) {
-			// エラー発生時に、受信したペイロードをログに出力
-			console.error(
-				"ログ取得エラー (handleFetchLogs):",
-				error, // ZodError の詳細
-				"受信したペイロード:\n", // 受信した内容
-				JSON.stringify(data.payload) // JSON文字列としてログ出力
-			);
+			console.error("ログ取得エラー (handleFetchLogs):", error, JSON.stringify(data.payload));
 			sendWsMessage(ws, {
 				type: "log/fetch",
-				payload: { result: false, content: [], message: "ログ取得失敗" }
+				payload: { result: false, content: [], message: "ログ取得失敗" },
 			});
 		}
 	}
 
-	// 'log/write' の処理
 	private async handleLogWrite(ws: WebSocket, data: TWsMessage): Promise<void> {
-
 		try {
-			// 正常系ログを追加
 			console.log(`[REQ] type: ${data.type}, payload: ${JSON.stringify(data.payload)}`);
-
-			// Zod スキーマでペイロードを検証
 			const payload = LogWritePayload.parse(data.payload);
 			const studentID = payload.content.student_ID;
 
-			// DataBaseHandler のメソッドを直接呼び出す
 			await this.dbHandler.insertOrUpdateLog(studentID);
 
-			// 1. 更新後の全ログを取得
 			const updatedLogs = await this.fetchLogs();
-
-			// 2. 在室人数をDBから取得
 			const inRoomCount = await this.dbHandler.getInRoomCount();
-
-			// 3. 今回の操作対象のユーザー情報を特定
-			const user = updatedLogs.find(log => log.student_ID === studentID);
+			const user = updatedLogs.find((log) => log.student_ID === studentID);
 
 			if (user) {
-				const student_Name = user.student_Name || ""; // null なら空文字
-				const isInRoom = user.isInRoom; // 0 (false) or 1 (true)
-
-				// 4. Slack メッセージを構築
-				const name = `${student_Name ? `(${student_Name})` : ""}`;
+				const studentName = user.student_Name || "";
+				const isInRoom = !!user.isInRoom;
 				const action = isInRoom ? "来た" : "帰った";
+				const name = studentName ? `(${studentName})` : "";
 				const postMsg = `${studentID}${name}が${action}よ～ (今の人数：${inRoomCount}人)`;
 
-				// 5. Slack 投稿
 				try {
-					await this.slackService.postMessage(postMsg);
+					const slackSettings = await this.dbHandler.getSlackSettings();
+					if (
+						slackSettings.slack_channel_id &&
+						slackSettings.slack_bot_token_encrypted &&
+						slackSettings.slack_bot_token_iv &&
+						slackSettings.slack_bot_token_auth_tag
+					) {
+						if (!CryptoService.isConfigured()) {
+							console.warn("SLACK_TOKEN_ENC_KEY が未設定のため Slack 投稿をスキップしました。");
+						} else {
+							const cryptoService = CryptoService.fromEnv();
+							const decryptedToken = cryptoService.decrypt({
+								cipherText: slackSettings.slack_bot_token_encrypted,
+								iv: slackSettings.slack_bot_token_iv,
+								authTag: slackSettings.slack_bot_token_auth_tag,
+							});
+
+							await this.slackService.postMessage(
+								postMsg,
+								decryptedToken,
+								slackSettings.slack_channel_id
+							);
+						}
+					}
 				} catch (slackError) {
 					console.error("Slack へのメッセージ投稿に失敗しました:", slackError);
 				}
 			}
 
-			// 全クライアントにブロードキャスト
 			await this.broadcastData();
-
 		} catch (error) {
-			// エラー発生時に、受信したペイロードをログに出力
-			console.error(
-				"ログ書き込みまたはブロードキャストエラー (handleLogWrite):",
-				error, // ZodError の詳細
-				"受信したペイロード:", // 受信した内容
-				JSON.stringify(data.payload) // JSON文字列としてログ出力
-			);
-
-			// エラーをクライアントに通知 (任意)
+			console.error("ログ書き込みまたはブロードキャストエラー (handleLogWrite):", error, JSON.stringify(data.payload));
 			sendWsMessage(ws, {
-				type: "ack", // エラー ACK
-				payload: { result: false, content: [], message: `ログ書き込み失敗: ${error instanceof Error ? error.message : "不明なエラー"}` }
+				type: "ack",
+				payload: {
+					result: false,
+					content: [],
+					message: `ログ書き込み失敗: ${error instanceof Error ? error.message : "不明なエラー"}`,
+				},
 			});
 		}
 	}
 
-	// 'user/auth' の処理
 	private async handleUserAuth(ws: WebSocket, data: TWsMessage): Promise<void> {
 		try {
-			// 正常系ログを追加
 			console.log(`[REQ] type: ${data.type}, payload: ${JSON.stringify(data.payload)}`);
-
-			// Zod スキーマでペイロードを検証
 			const payload = AuthPayload.parse(data.payload);
-
-			// 変更: ここから認証ロジックをご提示いただいた過去のコードに修正
-			// admin_pass は init.sql と同じ値
-			const admin_pass = 'fukaya_lab';
-
-			// AuthPayload は配列 (array) を含むため、最初の要素 [0] を使用
 			const { student_ID, password } = payload.content[0];
 
-			// 1. DBから保存されているトークンを取得
 			const storedToken = await this.dbHandler.getStudentToken(student_ID);
 			if (!storedToken) {
-				// ユーザーが存在しないか、トークンがない
+				this.setWsAuthState(ws, false);
 				sendWsMessage(ws, {
 					type: "user/auth",
-					payload: { result: false, content: [], message: "学籍番号またはトークンが異なります" }
+					payload: {
+						result: false,
+						content: [],
+						message: "学籍番号またはパスワードが異なります",
+					},
 				});
 				return;
 			}
 
-			// 2. init.sql と同じロジックで、クライアントから送られたパスワードをハッシュ化
-			const generateSHA256Hash = (input: string): string => createHash("sha256").update(input).digest("hex");
-
-			// 3. Salt を生成 (init.sql と同じロジック)
-			const salt = generateSHA256Hash(student_ID);
-
-			// 4. 期待されるトークンを生成 (init.sql と同じロジック)
-			// (password はクライアントから送られた平文の admin_pass)
-			const expectedToken = generateSHA256Hash(`${student_ID}${password}${salt}`);
-
-			// 5. DBのトークンと期待されるトークンを比較
-			const isValid = storedToken === expectedToken;
-
-			if (isValid) {
-				// 認証成功
+			const verifyResult = verifyAdminLogin(student_ID, password, storedToken);
+			if (!verifyResult.isValid) {
+				this.setWsAuthState(ws, false);
 				sendWsMessage(ws, {
 					type: "user/auth",
 					payload: {
-						result: true,
-						// 認証成功時は、DBから取得したハッシュ済みのトークンを返す
-						content: [{ student_ID: student_ID, token: storedToken }],
-						message: "認証成功"
-					}
+						result: false,
+						content: [],
+						message: verifyResult.message ?? "学籍番号またはパスワードが異なります",
+					},
 				});
-			} else {
-				// 認証失敗
-				sendWsMessage(ws, {
-					type: "user/auth",
-					payload: { result: false, content: [], message: "学籍番号またはトークンが異なります" }
-				});
+				return;
 			}
-			// 変更: 認証ロジックここまで
 
-		} catch (error) {
-			// エラー発生時に、受信したペイロードをログに出力
-			console.error(
-				"認証エラー (handleUserAuth):",
-				error, // ZodError の詳細
-				"受信したペイロード:\n", // 受信した内容
-				JSON.stringify(data.payload) // JSON文字列としてログ出力
-			);
+			this.setWsAuthState(ws, true);
 			sendWsMessage(ws, {
 				type: "user/auth",
-				payload: { result: false, content: [], message: `認証処理エラー: ${error instanceof Error ? error.message : "不明なエラー"}` }
+				payload: {
+					result: true,
+					content: [{ student_ID, token: storedToken }],
+					message: "認証成功",
+				},
+			});
+		} catch (error) {
+			this.setWsAuthState(ws, false);
+			console.error("認証エラー (handleUserAuth):", error, JSON.stringify(data.payload));
+			sendWsMessage(ws, {
+				type: "user/auth",
+				payload: {
+					result: false,
+					content: [],
+					message: `認証処理エラー: ${error instanceof Error ? error.message : "不明なエラー"}`,
+				},
 			});
 		}
 	}
 
-	// 'user/update_name' の処理
 	private async handleUpdateName(ws: WebSocket, data: TWsMessage): Promise<void> {
+		if (!this.ensureAdminAuthorized(ws, "user/update_name")) {
+			return;
+		}
+
 		try {
-			// 正常系ログを追加
 			console.log(`[REQ] type: ${data.type}, payload: ${JSON.stringify(data.payload)}`);
-
-			// Zod スキーマでペイロードを検証
 			const payload = UpdateNamePayload.parse(data.payload);
-
 			await this.dbHandler.updateStudentName(payload.content[0].student_ID, payload.content[0].student_Name);
 
-			// クライアントに成功 ACK を返す
 			sendWsMessage(ws, {
 				type: "user/update_name",
-				payload: { result: true, content: [], message: "氏名更新成功" }
+				payload: { result: true, content: [], message: "氏名更新成功" },
 			});
-
-			// 全クライアントにブロードキャスト
 			await this.broadcastData();
-
 		} catch (error) {
-			// エラー発生時に、受信したペイロードをログに出力
-			console.error(
-				"氏名更新エラー (handleUpdateName):",
-				error, // ZodError の詳細
-				"受信したペイロード:\n", // 受信した内容
-				JSON.stringify(data.payload) // JSON文字列としてログ出力
-			);
+			console.error("氏名更新エラー (handleUpdateName):", error, JSON.stringify(data.payload));
 			sendWsMessage(ws, {
 				type: "user/update_name",
-				payload: { result: false, content: [], message: `氏名更新失敗: ${error instanceof Error ? error.message : "不明なエラー"}` }
+				payload: {
+					result: false,
+					content: [],
+					message: `氏名更新失敗: ${error instanceof Error ? error.message : "不明なエラー"}`,
+				},
 			});
 		}
 	}
 
-	// 'user/fetchToken' の処理
 	private async handleFetchToken(ws: WebSocket, data: TWsMessage): Promise<void> {
+		if (!this.ensureAdminAuthorized(ws, "user/fetchToken")) {
+			return;
+		}
+
 		try {
-			// 正常系ログを追加
 			console.log(`[REQ] type: ${data.type}, payload: ${JSON.stringify(data.payload)}`);
-
-			// Zod スキーマでペイロードを検証
 			const payload = StudentIdPayload.parse(data.payload);
-
 			const token = await this.dbHandler.getStudentToken(payload.content[0].student_ID);
 
-			if (token) {
+			if (!token) {
 				sendWsMessage(ws, {
 					type: "user/fetchToken",
-					payload: {
-						result: true,
-						content: [{ student_ID: payload.content[0].student_ID, token: token }],
-						message: "トークン取得成功"
-					}
+					payload: { result: false, content: [], message: "該当する学生が見つかりません" },
 				});
-			} else {
-				sendWsMessage(ws, {
-					type: "user/fetchToken",
-					payload: { result: false, content: [], message: "該当する学生が見つかりません" }
-				});
+				return;
 			}
 
-		} catch (error) {
-			// エラー発生時に、受信したペイロードをログに出力
-			console.error(
-				"トークン取得エラー (handleFetchToken):",
-				error, // ZodError の詳細
-				"受信したペイロード:\n", // 受信した内容
-				JSON.stringify(data.payload) // JSON文字列としてログ出力
-			);
 			sendWsMessage(ws, {
 				type: "user/fetchToken",
-				payload: { result: false, content: [], message: `トークン取得失敗: ${error instanceof Error ? error.message : "不明なエラー"}` }
+				payload: {
+					result: true,
+					content: [{ student_ID: payload.content[0].student_ID, token }],
+					message: "トークン取得成功",
+				},
+			});
+		} catch (error) {
+			console.error("トークン取得エラー (handleFetchToken):", error, JSON.stringify(data.payload));
+			sendWsMessage(ws, {
+				type: "user/fetchToken",
+				payload: {
+					result: false,
+					content: [],
+					message: `トークン取得失敗: ${error instanceof Error ? error.message : "不明なエラー"}`,
+				},
 			});
 		}
 	}
 
-	// 'user/delete' の処理
 	private async handleDeleteUser(ws: WebSocket, data: TWsMessage): Promise<void> {
+		if (!this.ensureAdminAuthorized(ws, "user/delete")) {
+			return;
+		}
+
 		try {
-			// 正常系ログを追加
 			console.log(`[REQ] type: ${data.type}, payload: ${JSON.stringify(data.payload)}`);
-
-			// Zod スキーマでペイロードを検証
 			const payload = StudentIdPayload.parse(data.payload);
-
-			// DataBaseHandler.ts に追加したメソッドを呼び出す
 			await this.dbHandler.deleteStudent(payload.content[0].student_ID);
 
 			sendWsMessage(ws, {
 				type: "user/delete",
-				payload: { result: true, content: [], message: "ユーザー削除成功" }
+				payload: { result: true, content: [], message: "ユーザー削除成功" },
 			});
 
-			// ユーザー削除後にもブロードキャスト
 			await this.broadcastData();
-
 		} catch (error) {
-			// エラー発生時に、受信したペイロードをログに出力
-			console.error(
-				"ユーザー削除エラー (handleDeleteUser):",
-				error, // ZodError の詳細
-				"受信したペイロード:\n", // 受信した内容
-				JSON.stringify(data.payload) // JSON文字列としてログ出力
-			);
+			console.error("ユーザー削除エラー (handleDeleteUser):", error, JSON.stringify(data.payload));
 			sendWsMessage(ws, {
 				type: "user/delete",
-				payload: { result: false, content: [], message: `ユーザー削除処理エラー: ${error instanceof Error ? error.message : "不明なエラー"}` }
+				payload: {
+					result: false,
+					content: [],
+					message: `ユーザー削除処理エラー: ${error instanceof Error ? error.message : "不明なエラー"}`,
+				},
+			});
+		}
+	}
+
+	private async handleGetSlackSettings(ws: WebSocket): Promise<void> {
+		if (!this.ensureAdminAuthorized(ws, "admin/slack/get")) {
+			return;
+		}
+
+		try {
+			const settings = await this.dbHandler.getSlackSettings();
+			sendWsMessage(ws, {
+				type: "admin/slack/get",
+				payload: {
+					result: true,
+					content: [
+						{
+							channelId: settings.slack_channel_id ?? "",
+							tokenConfigured: !!settings.slack_bot_token_encrypted,
+							updatedAt: settings.updated_at,
+						},
+					],
+					message: "Slack設定取得成功",
+				},
+			});
+		} catch (error) {
+			sendWsMessage(ws, {
+				type: "admin/slack/get",
+				payload: {
+					result: false,
+					content: [],
+					message: `Slack設定取得失敗: ${error instanceof Error ? error.message : "不明なエラー"}`,
+				},
+			});
+		}
+	}
+
+	private async handleUpdateSlackSettings(ws: WebSocket, data: TWsMessage): Promise<void> {
+		if (!this.ensureAdminAuthorized(ws, "admin/slack/update")) {
+			return;
+		}
+
+		try {
+			const payload = SlackUpdatePayload.parse(data.payload);
+			const { channelId, botToken } = payload.content[0];
+			const trimmedChannel = channelId.trim();
+			const trimmedBotToken = botToken?.trim();
+
+			if (!trimmedChannel) {
+				throw new Error("SlackチャンネルIDは必須です。");
+			}
+
+			if (trimmedBotToken) {
+				if (!CryptoService.isConfigured()) {
+					throw new Error("SLACK_TOKEN_ENC_KEY が未設定です。");
+				}
+				const cryptoService = CryptoService.fromEnv();
+				const encrypted = cryptoService.encrypt(trimmedBotToken);
+				await this.dbHandler.updateSlackSettings(trimmedChannel, encrypted);
+			} else {
+				await this.dbHandler.updateSlackSettings(trimmedChannel);
+			}
+
+			const settings = await this.dbHandler.getSlackSettings();
+			sendWsMessage(ws, {
+				type: "admin/slack/update",
+				payload: {
+					result: true,
+					content: [
+						{
+							channelId: settings.slack_channel_id ?? "",
+							tokenConfigured: !!settings.slack_bot_token_encrypted,
+							updatedAt: settings.updated_at,
+						},
+					],
+					message: "Slack設定保存成功",
+				},
+			});
+		} catch (error) {
+			sendWsMessage(ws, {
+				type: "admin/slack/update",
+				payload: {
+					result: false,
+					content: [],
+					message: `Slack設定保存失敗: ${error instanceof Error ? error.message : "不明なエラー"}`,
+				},
+			});
+		}
+	}
+
+	private async handleCreateBackup(ws: WebSocket): Promise<void> {
+		if (!this.ensureAdminAuthorized(ws, "admin/backup/create")) {
+			return;
+		}
+
+		try {
+			const backup = await this.backupService.createBackup();
+			sendWsMessage(ws, {
+				type: "admin/backup/create",
+				payload: {
+					result: true,
+					content: [backup],
+					message: "バックアップ作成成功",
+				},
+			});
+		} catch (error) {
+			sendWsMessage(ws, {
+				type: "admin/backup/create",
+				payload: {
+					result: false,
+					content: [],
+					message: `バックアップ作成失敗: ${error instanceof Error ? error.message : "不明なエラー"}`,
+				},
+			});
+		}
+	}
+
+	private async handleListBackups(ws: WebSocket): Promise<void> {
+		if (!this.ensureAdminAuthorized(ws, "admin/backup/list")) {
+			return;
+		}
+
+		try {
+			const backups = await this.backupService.listBackups();
+			sendWsMessage(ws, {
+				type: "admin/backup/list",
+				payload: {
+					result: true,
+					content: backups,
+					message: "バックアップ一覧取得成功",
+				},
+			});
+		} catch (error) {
+			sendWsMessage(ws, {
+				type: "admin/backup/list",
+				payload: {
+					result: false,
+					content: [],
+					message: `バックアップ一覧取得失敗: ${error instanceof Error ? error.message : "不明なエラー"}`,
+				},
+			});
+		}
+	}
+
+	private async handleRestoreBackup(ws: WebSocket, data: TWsMessage): Promise<void> {
+		if (!this.ensureAdminAuthorized(ws, "admin/backup/restore")) {
+			return;
+		}
+
+		try {
+			const payload = BackupRestorePayload.parse(data.payload);
+			const { backupName, confirmRestore } = payload.content[0];
+
+			if (!confirmRestore) {
+				throw new Error("リストア確認フラグが不足しています。");
+			}
+
+			const result = await this.backupService.restoreBackup(backupName);
+			await this.broadcastData();
+			sendWsMessage(ws, {
+				type: "admin/backup/restore",
+				payload: {
+					result: true,
+					content: [result],
+					message: "バックアップリストア成功",
+				},
+			});
+		} catch (error) {
+			sendWsMessage(ws, {
+				type: "admin/backup/restore",
+				payload: {
+					result: false,
+					content: [],
+					message: `バックアップリストア失敗: ${error instanceof Error ? error.message : "不明なエラー"}`,
+				},
 			});
 		}
 	}

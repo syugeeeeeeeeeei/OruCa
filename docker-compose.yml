@@ -50,12 +50,14 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-OruCa_DB}
       MYSQL_USER: ${MYSQL_USER:-OruCa_user}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-OruCa_user_pass}
-      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
-      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID:-}
+      ADMIN_FIXED_PASSWORD: ${ADMIN_FIXED_PASSWORD:-}
+      SLACK_TOKEN_ENC_KEY: ${SLACK_TOKEN_ENC_KEY:-}
+      BACKUP_DIR: /backups
       RUNTIME_CONFIG_DIR: /app/runtime-config
       TZ: Asia/Tokyo
     volumes:
       - ${APPDATA_ROOT:-../../appdata/oruca}/config:/app/runtime-config
+      - ${APPDATA_ROOT:-../../appdata/oruca}/backups:/backups
     depends_on:
       mysql:
         condition: service_healthy

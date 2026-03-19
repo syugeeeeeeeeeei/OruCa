@@ -50,7 +50,21 @@ export const DB_CONFIG:IDBConfig = {
 	connectTimeout: 60000 // 60秒に設定 (ミリ秒)
 }
 
-export type TWsProcessType = "ack" | "log/fetch" | "log/write" | "user/auth" | "user/update_name" | "user/fetchToken" | "user/delete" | "slackBot/post";
+export type TWsProcessType =
+	| "ack"
+	| "unauthorized"
+	| "log/fetch"
+	| "log/write"
+	| "user/auth"
+	| "user/update_name"
+	| "user/fetchToken"
+	| "user/delete"
+	| "admin/slack/get"
+	| "admin/slack/update"
+	| "admin/backup/create"
+	| "admin/backup/list"
+	| "admin/backup/restore"
+	| "slackBot/post";
 export type TWsPayLoad = {
 	result:boolean,
 	content: Record<string,any>[],
@@ -66,6 +80,6 @@ export type DBresult = {
 	"noHead": [mysql.RowDataPacket[]];
 }
 
-export const SLACK_BOT_TOKEN = getEnvOptional("SLACK_BOT_TOKEN");
-export const SLACK_CHANNEL_ID = getEnvOptional("SLACK_CHANNEL_ID");
-export const SLACK_ENABLED = Boolean(SLACK_BOT_TOKEN && SLACK_CHANNEL_ID);
+export const ADMIN_FIXED_PASSWORD = getEnv("ADMIN_FIXED_PASSWORD");
+export const SLACK_TOKEN_ENC_KEY = getEnvOptional("SLACK_TOKEN_ENC_KEY", "");
+export const BACKUP_DIR = getEnvOptional("BACKUP_DIR", "/backups");

@@ -1,6 +1,15 @@
-// DataBaseHandler.ts
+import { createStudentToken } from "@infra/security/AdminAuth";
+import { EncryptedValue } from "@infra/security/CryptoService";
 import { IDBConfig } from "@src/config";
 import mysql from "mysql2/promise";
+
+export type SlackSettingsRow = {
+	slack_channel_id: string | null;
+	slack_bot_token_encrypted: string | null;
+	slack_bot_token_iv: string | null;
+	slack_bot_token_auth_tag: string | null;
+	updated_at: string;
+};
 
 export class DatabaseHandler {
 	private pool: mysql.Pool;
@@ -15,20 +24,37 @@ export class DatabaseHandler {
 			waitForConnections: config.waitForConnections,
 			queueLimit: config.queueLimit,
 			connectTimeout: config.connectTimeout,
-			timezone: "+09:00", // タイムゾーン設定 (前回適用済み)
+			timezone: "+09:00",
 		});
 	}
 
 	public async connect(): Promise<void> {
+		let connection: mysql.PoolConnection | null = null;
 		try {
-			// 接続テスト
-			const connection = await this.pool.getConnection();
+			connection = await this.pool.getConnection();
 			console.log("MySQL データベースに接続しました。");
-			connection.release(); // すぐに解放
+			await this.bootstrapSchema(connection);
 		} catch (err) {
 			console.error("MySQL データベース接続エラー:", err);
-			throw err; // サーバーの起動を停止させるためにエラーをスロー
+			throw err;
+		} finally {
+			connection?.release();
 		}
+	}
+
+	private async bootstrapSchema(connection: mysql.PoolConnection): Promise<void> {
+		await connection.query(`CREATE TABLE IF NOT EXISTS app_settings (
+			id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+			slack_channel_id VARCHAR(64),
+			slack_bot_token_encrypted TEXT,
+			slack_bot_token_iv VARCHAR(64),
+			slack_bot_token_auth_tag VARCHAR(64),
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+		)`);
+
+		await connection.query(
+			"INSERT INTO app_settings (id) VALUES (1) ON DUPLICATE KEY UPDATE id = id"
+		);
 	}
 
 	public async close(): Promise<void> {
@@ -41,9 +67,6 @@ export class DatabaseHandler {
 		}
 	}
 
-	/**
-	 * student_log_view からすべての学生ログを取得します。
-	 */
 	public async fetchStudentLogs(): Promise<any[]> {
 		const sql = "SELECT * FROM student_log_view";
 		try {
@@ -51,53 +74,61 @@ export class DatabaseHandler {
 			return rows as any[];
 		} catch (err) {
 			console.error("SQL実行エラー (fetchStudentLogs):", err);
-			throw err; // エラーを呼び出し元に伝播させる
-		}
-	}
-
-	/**
-	 * 指定された student_ID のログを挿入または更新します。
-	 * (ストアドプロシージャ 'insert_or_update_log' を呼び出します)
-	 */
-	public async insertOrUpdateLog(studentID: string): Promise<void> {
-		const sql = "CALL insert_or_update_log(?)";
-		try {
-			await this.pool.query(sql, [studentID]);
-		} catch (err) {
-			console.error("SQL実行エラー (insertOrUpdateLog):", err);
 			throw err;
 		}
 	}
 
-	/**
-	 * 指定された student_ID の学生名を更新します。
-	 * (ストアドプロシージャ 'update_student_name' を呼び出します)
-	 */
+	public async insertOrUpdateLog(studentID: string): Promise<void> {
+		const connection = await this.pool.getConnection();
+		try {
+			await connection.beginTransaction();
+
+			const token = createStudentToken(studentID);
+			await connection.query(
+				`INSERT INTO users (student_ID, student_Name, student_token)
+				 VALUES (?, NULL, ?)
+				 ON DUPLICATE KEY UPDATE student_token = VALUES(student_token)`,
+				[studentID, token]
+			);
+
+			await connection.query(
+				`INSERT INTO logs (student_ID, isInRoom)
+				 VALUES (?, TRUE)
+				 ON DUPLICATE KEY UPDATE
+					isInRoom = NOT isInRoom,
+					updated_at = CURRENT_TIMESTAMP`,
+				[studentID]
+			);
+
+			await connection.commit();
+		} catch (err) {
+			await connection.rollback();
+			console.error("SQL実行エラー (insertOrUpdateLog):", err);
+			throw err;
+		} finally {
+			connection.release();
+		}
+	}
+
 	public async updateStudentName(
 		studentID: string,
 		studentName: string
 	): Promise<void> {
-		const sql = "CALL update_student_name(?, ?)";
+		const sql = "UPDATE users SET student_Name = ? WHERE student_ID = ?";
 		try {
-			await this.pool.query(sql, [studentID, studentName]);
+			await this.pool.query(sql, [studentName, studentID]);
 		} catch (err) {
 			console.error("SQL実行エラー (updateStudentName):", err);
 			throw err;
 		}
 	}
 
-	/**
-	 * 指定された student_ID の学生トークンを取得します。
-	 * (ストアドプロシージャ 'get_student_token' を呼び出します)
-	 */
 	public async getStudentToken(studentID: string): Promise<string | null> {
-		const sql = "CALL get_student_token(?)";
+		const sql = "SELECT student_token FROM student_token_view WHERE student_ID = ?";
 		try {
-			// ストアドプロシージャの呼び出し結果は複雑なネスト構造になる
 			const [rows] = (await this.pool.query(sql, [studentID])) as any[];
-			// rows[0] が SELECT の結果セット
-			if (rows[0] && rows[0].length > 0) {
-				return rows[0][0].student_token;
+			if (rows && rows.length > 0) {
+				return rows[0].student_token;
 			}
 			return null;
 		} catch (err) {
@@ -106,10 +137,6 @@ export class DatabaseHandler {
 		}
 	}
 
-	// 変更: ここから追加 (Slack通知のため)
-	/**
-	 * 現在在室している人数を取得します。
-	 */
 	public async getInRoomCount(): Promise<number> {
 		const sql = "SELECT COUNT(*) AS inRoomCount FROM logs WHERE isInRoom = TRUE";
 		try {
@@ -123,10 +150,7 @@ export class DatabaseHandler {
 			throw err;
 		}
 	}
-	/**
-	 * 指定された student_ID のユーザーを削除します。
-	 * (logs テーブルも CASCADE により削除されます)
-	 */
+
 	public async deleteStudent(studentID: string): Promise<void> {
 		const sql = "DELETE FROM users WHERE student_ID = ?";
 		try {
@@ -137,26 +161,79 @@ export class DatabaseHandler {
 		}
 	}
 
-	/**
-	 * 在室中のすべてのユーザーを「不在」状態に更新します。
-	 * (日次リセット用)
-	 * @returns 更新された行数
-	 */
 	public async setAllUsersOutOfRoom(): Promise<number> {
-		// isInRoom = TRUE のレコードのみを FALSE に更新
 		const sql = "UPDATE logs SET isInRoom = FALSE WHERE isInRoom = TRUE";
 		try {
 			const [results] = (await this.pool.query(sql)) as [
 				mysql.ResultSetHeader,
-				any
+				any,
 			];
 			console.log(
 				`Daily reset: ${results.affectedRows} users set to 'out of room'.`
 			);
-			return results.affectedRows; // 影響を受けた行数を返す
+			return results.affectedRows;
 		} catch (err) {
 			console.error("SQL実行エラー (setAllUsersOutOfRoom):", err);
-			throw err; // エラーを呼び出し元に伝播させる
+			throw err;
 		}
+	}
+
+	private async ensureAppSettingsRow(): Promise<void> {
+		await this.pool.query(
+			"INSERT INTO app_settings (id) VALUES (1) ON DUPLICATE KEY UPDATE id = id"
+		);
+	}
+
+	public async getSlackSettings(): Promise<SlackSettingsRow> {
+		await this.ensureAppSettingsRow();
+
+		const sql = `SELECT
+			slack_channel_id,
+			slack_bot_token_encrypted,
+			slack_bot_token_iv,
+			slack_bot_token_auth_tag,
+			updated_at
+		FROM app_settings
+		WHERE id = 1`;
+
+		const [rows] = (await this.pool.query(sql)) as any[];
+		if (!rows || rows.length === 0) {
+			throw new Error("Slack設定の取得に失敗しました。");
+		}
+		return rows[0] as SlackSettingsRow;
+	}
+
+	public async updateSlackSettings(
+		channelId: string,
+		encryptedToken?: EncryptedValue
+	): Promise<void> {
+		await this.ensureAppSettingsRow();
+
+		if (encryptedToken) {
+			const sql = `UPDATE app_settings
+			SET
+				slack_channel_id = ?,
+				slack_bot_token_encrypted = ?,
+				slack_bot_token_iv = ?,
+				slack_bot_token_auth_tag = ?,
+				updated_at = CURRENT_TIMESTAMP
+			WHERE id = 1`;
+
+			await this.pool.query(sql, [
+				channelId,
+				encryptedToken.cipherText,
+				encryptedToken.iv,
+				encryptedToken.authTag,
+			]);
+			return;
+		}
+
+		const sql = `UPDATE app_settings
+		SET
+			slack_channel_id = ?,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = 1`;
+
+		await this.pool.query(sql, [channelId]);
 	}
 }

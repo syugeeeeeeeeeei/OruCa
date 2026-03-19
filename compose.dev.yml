@@ -23,6 +23,8 @@ services:
     volumes:
       - ./api:/app:rw         # ソースコードをマウント
       - /app/node_modules     # コンテナ内のnode_modulesを守る
+      - ${APPDATA_ROOT:-../../appdata/oruca}/config:/app/runtime-config
+      - ${APPDATA_ROOT:-../../appdata/oruca}/backups:/backups
     command: ["yarn", "start"] # devコマンド (ts-node-dev)
     restart: no
 

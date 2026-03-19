@@ -1,6 +1,7 @@
 # --- Base Stage ---
 FROM node:20-alpine AS base
 WORKDIR /app
+RUN apk add --no-cache mysql-client
 # パッケージ定義をコピー
 COPY package.json yarn.lock ./
 # 共通設定やtsconfigをコピー

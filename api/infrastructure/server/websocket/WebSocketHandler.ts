@@ -30,6 +30,7 @@ export class WebSocketHandler {
 
 	private async handleConnection(ws: WebSocket.WebSocket) {
 		console.log("クライアントが接続しました");
+		this.messageHandler.onClientConnected(ws);
 
 		try {
 			// 初期データをこのクライアントに送信
@@ -73,6 +74,7 @@ export class WebSocketHandler {
 		});
 
 		ws.on("close", () => {
+			this.messageHandler.onClientDisconnected(ws);
 			console.log("クライアントが切断しました");
 		});
 

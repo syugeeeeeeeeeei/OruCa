@@ -1,35 +1,35 @@
-// SlackService.ts
-import { SLACK_BOT_TOKEN, SLACK_CHANNEL_ID, SLACK_ENABLED } from "@src/config";
-
 export class SlackService {
-	// Slackにメッセージを投稿するメソッド
-	public async postMessage(message: string): Promise<void> {
-		if (!SLACK_ENABLED) {
-			console.log("Slack通知は未設定のためスキップしました。");
+	public async postMessage(
+		message: string,
+		token: string,
+		channelId: string
+	): Promise<void> {
+		if (!token.trim() || !channelId.trim()) {
+			console.log("Slack設定が未設定のため投稿をスキップしました。");
 			return;
 		}
 
-		try {
-			const response = await fetch('https://slack.com/api/chat.postMessage', {
-				method: 'POST',
-				headers: {
-					'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					channel: SLACK_CHANNEL_ID,
-					text: message
-				})
-			});
+		const response = await fetch("https://slack.com/api/chat.postMessage", {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				channel: channelId,
+				text: message,
+			}),
+		});
 
-			if (!response.ok) {
-				throw new Error(`Slack API error: ${response.status}`);
-			}
-
-			console.log("SlackBotにメッセージを送信しました");
-		} catch (error) {
-			console.error("SlackBot送信エラー:", error);
-			throw error;
+		if (!response.ok) {
+			throw new Error(`Slack API error: ${response.status}`);
 		}
+
+		const result = await response.json() as { ok?: boolean; error?: string };
+		if (!result.ok) {
+			throw new Error(`Slack API error: ${result.error ?? "unknown_error"}`);
+		}
+
+		console.log("SlackBotにメッセージを送信しました");
 	}
 }
