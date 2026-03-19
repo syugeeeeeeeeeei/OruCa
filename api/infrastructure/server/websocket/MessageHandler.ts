@@ -1,6 +1,10 @@
 import { DatabaseHandler } from "@infra/database/DataBaseHandler";
 import { SlackService } from "@infra/integrations/SlackServive";
-import { verifyAdminLogin } from "@infra/security/AdminAuth";
+import {
+	isDebugAdminEnabled,
+	isDebugAdminLogin,
+	verifyAdminLogin,
+} from "@infra/security/AdminAuth";
 import { CryptoService } from "@infra/security/CryptoService";
 import { BackupService } from "@infra/services/BackupService";
 import { TWsMessage, TWsProcessType } from "@src/config";
@@ -73,6 +77,10 @@ export class MessageHandler {
 		this.backupService = new BackupService();
 		this.adminSessionMap = new WeakMap();
 		this.handlers = this.initializeHandlers();
+
+		if (isDebugAdminEnabled()) {
+			console.warn("[DEBUG_ADMIN] デバッグ管理者ログインが有効です。本番では必ず無効化してください。");
+		}
 	}
 
 	public onClientConnected(ws: WebSocket): void {
@@ -232,6 +240,19 @@ export class MessageHandler {
 			console.log(`[REQ] type: ${data.type}, payload: ${JSON.stringify(data.payload)}`);
 			const payload = AuthPayload.parse(data.payload);
 			const { student_ID, password } = payload.content[0];
+
+			if (isDebugAdminLogin(student_ID, password)) {
+				this.setWsAuthState(ws, true);
+				sendWsMessage(ws, {
+					type: "user/auth",
+					payload: {
+						result: true,
+						content: [{ student_ID, token: "debug-session-token", debug: true }],
+						message: "認証成功 (debug mode)",
+					},
+				});
+				return;
+			}
 
 			const storedToken = await this.dbHandler.getStudentToken(student_ID);
 			if (!storedToken) {

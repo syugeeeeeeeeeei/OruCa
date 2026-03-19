@@ -1,0 +1,6 @@
+services:
+  api:
+    environment:
+      DEBUG_ADMIN_ENABLED: "true"
+      DEBUG_ADMIN_USER: ${DEBUG_ADMIN_USER:-test-user}
+      DEBUG_ADMIN_PASSWORD: ${DEBUG_ADMIN_PASSWORD:-test-password}

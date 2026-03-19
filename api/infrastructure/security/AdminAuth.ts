@@ -1,4 +1,9 @@
-import { ADMIN_FIXED_PASSWORD } from "@src/config";
+import {
+	ADMIN_FIXED_PASSWORD,
+	DEBUG_ADMIN_ENABLED,
+	DEBUG_ADMIN_PASSWORD,
+	DEBUG_ADMIN_USER,
+} from "@src/config";
 import { createHash, timingSafeEqual } from "crypto";
 
 function generateSHA256Hash(input: string): string {
@@ -9,8 +14,34 @@ function normalizeFixedPassword(): string {
 	return ADMIN_FIXED_PASSWORD.trim();
 }
 
+function normalizeDebugUser(): string {
+	return DEBUG_ADMIN_USER.trim();
+}
+
+function normalizeDebugPassword(): string {
+	return DEBUG_ADMIN_PASSWORD.trim();
+}
+
 export function isAdminPasswordConfigured(): boolean {
 	return normalizeFixedPassword().length > 0;
+}
+
+export function isDebugAdminEnabled(): boolean {
+	return DEBUG_ADMIN_ENABLED;
+}
+
+export function isDebugAdminLogin(studentID: string, passwordInput: string): boolean {
+	if (!isDebugAdminEnabled()) {
+		return false;
+	}
+
+	const debugUser = normalizeDebugUser();
+	const debugPassword = normalizeDebugPassword();
+	if (!debugUser || !debugPassword) {
+		return false;
+	}
+
+	return studentID === debugUser && passwordInput === debugPassword;
 }
 
 function createSalt(studentID: string): string {

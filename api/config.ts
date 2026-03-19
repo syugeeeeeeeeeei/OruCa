@@ -83,3 +83,6 @@ export type DBresult = {
 export const ADMIN_FIXED_PASSWORD = getEnv("ADMIN_FIXED_PASSWORD");
 export const SLACK_TOKEN_ENC_KEY = getEnvOptional("SLACK_TOKEN_ENC_KEY", "");
 export const BACKUP_DIR = getEnvOptional("BACKUP_DIR", "/backups");
+export const DEBUG_ADMIN_ENABLED = getEnvOptional("DEBUG_ADMIN_ENABLED", "false").toLowerCase() === "true";
+export const DEBUG_ADMIN_USER = getEnvOptional("DEBUG_ADMIN_USER", "test-user");
+export const DEBUG_ADMIN_PASSWORD = getEnvOptional("DEBUG_ADMIN_PASSWORD", "test-password");
