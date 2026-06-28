@@ -1,91 +1,91 @@
 services:
-  # 本番用 Nginx (ビルド機能付き)
-  web:
-    build:
-      context: .              # プロジェクトルートを指定 (vite/ と web/ 両方にアクセスするため)
-      dockerfile: web/Dockerfile
-    container_name: oruca-web
-    restart: unless-stopped
-    depends_on:
-      - api
-    networks:
-      - default
-      - fukaya-lab-network
-    labels:
-      caddy: http://oruca.fukaya-sus.lab
-      caddy.reverse_proxy: "{{upstreams 80}}"
+    # 本番用 Nginx (ビルド機能付き)
+    web:
+        build:
+            context: . # プロジェクトルートを指定 (vite/ と web/ 両方にアクセスするため)
+            dockerfile: web/Dockerfile
+        container_name: oruca-web
+        restart: unless-stopped
+        depends_on:
+            - api
+        networks:
+            - default
+            - fukaya-lab-network
+        labels:
+            caddy: http://oruca.fukaya-sus.lab
+            caddy.reverse_proxy: "{{upstreams 80}}"
 
-  # MySQL
-  mysql:
-    build:
-      context: mysql
-    container_name: oruca-mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_DATABASE : ${MYSQL_DATABASE}
-      MYSQL_USER : ${MYSQL_USER}
-      MYSQL_PASSWORD : ${MYSQL_PASSWORD}
-      MYSQL_ROOT_PASSWORD : ${MYSQL_ROOT_PASSWORD}
-    cap_add:
-      - SYS_NICE
-    volumes:
-      - ./mysql/data/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - mysql_data:/var/lib/mysql
-      - ./mysql/backups:/backups
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      retries: 3
-      start_period: 10s
-      timeout: 10s
-    networks:
-      - default
+    # MySQL
+    mysql:
+        build:
+            context: mysql
+        container_name: oruca-mysql
+        restart: unless-stopped
+        environment:
+            MYSQL_DATABASE: ${MYSQL_DATABASE}
+            MYSQL_USER: ${MYSQL_USER}
+            MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+        cap_add:
+            - SYS_NICE
+        volumes:
+            - ./mysql/data/init.sql:/docker-entrypoint-initdb.d/init.sql
+            - mysql_data:/var/lib/mysql
+            - ./mysql/backups:/backups
+        healthcheck:
+            test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+            interval: 10s
+            retries: 3
+            start_period: 10s
+            timeout: 10s
+        networks:
+            - default
 
-  # API (Production Mode)
-  api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-      target: prod            # Prodステージを使用
-    container_name: oruca-api
-    restart: unless-stopped
-    environment:
-      MYSQL_DATABASE : ${MYSQL_DATABASE}
-      MYSQL_USER : ${MYSQL_USER}
-      MYSQL_PASSWORD : ${MYSQL_PASSWORD}
-      SLACK_BOT_TOKEN : ${SLACK_BOT_TOKEN}
-      SLACK_CHANNEL_ID : ${SLACK_CHANNEL_ID}
-      TZ: Asia/Tokyo
-    # volumes: 削除 (コードはイメージ内にCOPY済み)
-    depends_on:
-      mysql:
-        condition: service_healthy
-    networks:
-      - default
+    # API (Production Mode)
+    api:
+        build:
+            context: ./api
+            dockerfile: Dockerfile
+            target: prod # Prodステージを使用
+        container_name: oruca-api
+        restart: unless-stopped
+        environment:
+            MYSQL_DATABASE: ${MYSQL_DATABASE}
+            MYSQL_USER: ${MYSQL_USER}
+            MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+            SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+            SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID}
+            TZ: Asia/Tokyo
+        # volumes: 削除 (コードはイメージ内にCOPY済み)
+        depends_on:
+            mysql:
+                condition: service_healthy
+        networks:
+            - default
 
-  # NFC
-  nfc:
-    container_name: oruca-nfc
-    build:
-      context: nfc
-    init: true
-    restart: unless-stopped
-    environment:
-      - TZ=Asia/Tokyo
-    command: ["python","main.py"]
-    depends_on:
-      - api
-    devices:
-      - "/dev/bus/usb:/dev/bus/usb"
-    networks:
-      - default
+    # NFC
+    nfc:
+        container_name: oruca-nfc
+        build:
+            context: nfc
+        init: true
+        restart: unless-stopped
+        environment:
+            - TZ=Asia/Tokyo
+        command: ["python", "main.py"]
+        depends_on:
+            - api
+        devices:
+            - "/dev/bus/usb:/dev/bus/usb"
+        networks:
+            - default
 
 networks:
-  default : 
-    driver: bridge
-  fukaya-lab-network:
-    external: true
-    name: fukaya-lab-network
+    default:
+        driver: bridge
+    fukaya-lab-network:
+        external: true
+        name: fukaya-lab-network
 
 volumes:
-  mysql_data:
+    mysql_data:

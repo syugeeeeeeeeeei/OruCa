@@ -38,7 +38,7 @@ save-backup:
 restore-backup backup_id:
     #!/usr/bin/env bash
     set -e # エラー発生時に即終了
-    
+
     BACKUP_FILE="{{backup_root}}/{{backup_id}}/backup.sql"
 
     # バックアップファイルの存在確認
@@ -48,8 +48,8 @@ restore-backup backup_id:
     fi
 
     echo "🔄 Restoring database from $BACKUP_FILE..."
-    
+
     # SQLファイルをコンテナ内のmysqlコマンドに流し込む
     cat "$BACKUP_FILE" | docker compose exec -T mysql sh -c 'mysql -vvv -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'
-    
+
     echo "✅ Database restored successfully."
