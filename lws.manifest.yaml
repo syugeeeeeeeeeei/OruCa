@@ -1,0 +1,7 @@
+apiVersion: lws/v1
+metadata:
+  name: OruCa
+  description: FeliCaカードを利用して研究室メンバーの在室状況をリアルタイムに管理・表示するWebアプリケーション
+public:
+  service: web
+  port: 80

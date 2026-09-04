@@ -45,4 +45,7 @@ ENV TZ JST-9
 
 RUN mkdir /backups
 
+# LWSではホスト側ファイルのbind mountを使用できないため、初期スキーマをイメージへ含める。
+COPY data/init.sql /docker-entrypoint-initdb.d/init.sql
+
 CMD ["mysqld"]

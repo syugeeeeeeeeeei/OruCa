@@ -1,0 +1,63 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  mysql:
+    build:
+      context: mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    cap_add:
+      - SYS_NICE
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - mysql_backups:/backups
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 3
+      start_period: 10s
+      timeout: 10s
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+      target: prod
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID}
+      TZ: Asia/Tokyo
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  nfc:
+    build:
+      context: nfc
+    init: true
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Tokyo
+    command: ["python", "main.py"]
+    depends_on:
+      - api
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+
+volumes:
+  mysql_data:
+  mysql_backups:
