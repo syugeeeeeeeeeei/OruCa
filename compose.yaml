@@ -12,10 +12,10 @@ services:
       context: mysql
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-OruCa_DB}
+      MYSQL_USER: ${MYSQL_USER:-OruCa_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-OruCa_user_pass}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
     cap_add:
       - SYS_NICE
     volumes:
@@ -35,12 +35,12 @@ services:
       target: prod
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      ADMIN_FIXED_PASSWORD: ${ADMIN_FIXED_PASSWORD}
-      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
-      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-OruCa_DB}
+      MYSQL_USER: ${MYSQL_USER:-OruCa_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-OruCa_user_pass}
+      ADMIN_FIXED_PASSWORD: ${ADMIN_FIXED_PASSWORD:-fukaya_lab}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID:-}
       TZ: Asia/Tokyo
     depends_on:
       mysql:
