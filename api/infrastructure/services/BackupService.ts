@@ -51,10 +51,12 @@ export class BackupService {
 
 	private async runDump(outputPath: string): Promise<void> {
 		await this.ensureBackupDir();
-		const dumpArgs = ["--no-tablespaces", ...this.getMysqlArgs()];
+		// Compose内のMySQLには公開CAで署名された証明書がないため、
+		// 内部ネットワーク上のバックアップ接続ではTLS検証を行わない。
+		const dumpArgs = ["--skip-ssl", "--no-tablespaces", ...this.getMysqlArgs()];
 
 		await new Promise<void>((resolve, reject) => {
-			const dumpProc = spawn("mysqldump", dumpArgs, {
+			const dumpProc = spawn("mariadb-dump", dumpArgs, {
 				stdio: ["ignore", "pipe", "pipe"],
 			});
 			const output = createWriteStream(outputPath, { encoding: "utf-8" });
@@ -91,7 +93,7 @@ export class BackupService {
 
 	private async runRestore(inputPath: string): Promise<void> {
 		await new Promise<void>((resolve, reject) => {
-			const restoreProc = spawn("mysql", this.getMysqlArgs(), {
+			const restoreProc = spawn("mysql", ["--skip-ssl", ...this.getMysqlArgs()], {
 				stdio: ["pipe", "ignore", "pipe"],
 			});
 
