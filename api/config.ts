@@ -69,7 +69,8 @@ export type TWsProcessType =
 	| "slackBot/post";
 export type TWsPayLoad = {
 	result:boolean,
-	content: Record<string,any>[],
+	// WebSocket payloads use an array for most messages and an object for log/write.
+	content: any,
 	message:string,
 }
 export type TWsMessage = {

@@ -41,7 +41,7 @@ function VirtualNfcReaderPanel() {
 		setIsSubmitting(true);
 		sendMessage({
 			type: "debug/nfc/read",
-			payload: { result: true, content: [{ student_ID: normalizedStudentID }], message: "仮想NFC読み取り" },
+			payload: { result: true, content: { student_ID: normalizedStudentID }, message: "仮想NFC読み取り" },
 		});
 	};
 

@@ -35,7 +35,8 @@ export type TWsProcessType =
 	| "debug/nfc/read";
 export type TWsPayLoad = {
 	result: boolean,
-	content: undefined | Record<string, any>[],
+	// WebSocket payloads use an array for most messages and an object for log/write.
+	content: any,
 	message: string,
 }
 export type TWsMessage = {

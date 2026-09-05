@@ -34,6 +34,9 @@ FROM node:20-alpine AS prod
 WORKDIR /app
 ENV NODE_ENV=production
 
+# バックアップ／リストア機能が使用する mysqldump と mysql を本番APIにも含める
+RUN apk add --no-cache mysql-client
+
 COPY package.json yarn.lock ./
 # 本番用依存関係のみインストール
 RUN yarn install --production --frozen-lockfile
