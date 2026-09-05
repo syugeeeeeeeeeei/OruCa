@@ -104,6 +104,8 @@ export class MessageHandler {
 			"admin/backup/create": this.handleCreateBackup.bind(this),
 			"admin/backup/list": this.handleListBackups.bind(this),
 			"admin/backup/restore": this.handleRestoreBackup.bind(this),
+			"debug/nfc/status": this.handleDebugNfcStatus.bind(this),
+			"debug/nfc/read": this.handleDebugNfcRead.bind(this),
 		};
 	}
 
@@ -172,56 +174,60 @@ export class MessageHandler {
 		}
 	}
 
+	private async writeLog(studentID: string): Promise<void> {
+		await this.dbHandler.insertOrUpdateLog(studentID);
+
+		const updatedLogs = await this.fetchLogs();
+		const inRoomCount = await this.dbHandler.getInRoomCount();
+		const user = updatedLogs.find((log) => log.student_ID === studentID);
+
+		if (user) {
+			const studentName = user.student_Name || "";
+			const isInRoom = !!user.isInRoom;
+			const action = isInRoom ? "来た" : "帰った";
+			const name = studentName ? `(${studentName})` : "";
+			const postMsg = `${studentID}${name}が${action}よ～ (今の人数：${inRoomCount}人)`;
+
+			try {
+				const slackSettings = await this.dbHandler.getSlackSettings();
+				if (
+					slackSettings.slack_channel_id &&
+					slackSettings.slack_bot_token_encrypted &&
+					slackSettings.slack_bot_token_iv &&
+					slackSettings.slack_bot_token_auth_tag
+				) {
+					if (!CryptoService.isConfigured()) {
+						console.warn("SLACK_TOKEN_ENC_KEY が未設定のため Slack 投稿をスキップしました。");
+					} else {
+						const cryptoService = CryptoService.fromEnv();
+						const decryptedToken = cryptoService.decrypt({
+							cipherText: slackSettings.slack_bot_token_encrypted,
+							iv: slackSettings.slack_bot_token_iv,
+							authTag: slackSettings.slack_bot_token_auth_tag,
+						});
+
+						await this.slackService.postMessage(
+							postMsg,
+							decryptedToken,
+							slackSettings.slack_channel_id
+						);
+					}
+				}
+			} catch (slackError) {
+				console.error("Slack へのメッセージ投稿に失敗しました:", slackError);
+			}
+		}
+
+		await this.broadcastData();
+	}
+
 	private async handleLogWrite(ws: WebSocket, data: TWsMessage): Promise<void> {
 		try {
 			console.log(`[REQ] type: ${data.type}, payload: ${JSON.stringify(data.payload)}`);
 			const payload = LogWritePayload.parse(data.payload);
 			const studentID = payload.content.student_ID;
 
-			await this.dbHandler.insertOrUpdateLog(studentID);
-
-			const updatedLogs = await this.fetchLogs();
-			const inRoomCount = await this.dbHandler.getInRoomCount();
-			const user = updatedLogs.find((log) => log.student_ID === studentID);
-
-			if (user) {
-				const studentName = user.student_Name || "";
-				const isInRoom = !!user.isInRoom;
-				const action = isInRoom ? "来た" : "帰った";
-				const name = studentName ? `(${studentName})` : "";
-				const postMsg = `${studentID}${name}が${action}よ～ (今の人数：${inRoomCount}人)`;
-
-				try {
-					const slackSettings = await this.dbHandler.getSlackSettings();
-					if (
-						slackSettings.slack_channel_id &&
-						slackSettings.slack_bot_token_encrypted &&
-						slackSettings.slack_bot_token_iv &&
-						slackSettings.slack_bot_token_auth_tag
-					) {
-						if (!CryptoService.isConfigured()) {
-							console.warn("SLACK_TOKEN_ENC_KEY が未設定のため Slack 投稿をスキップしました。");
-						} else {
-							const cryptoService = CryptoService.fromEnv();
-							const decryptedToken = cryptoService.decrypt({
-								cipherText: slackSettings.slack_bot_token_encrypted,
-								iv: slackSettings.slack_bot_token_iv,
-								authTag: slackSettings.slack_bot_token_auth_tag,
-							});
-
-							await this.slackService.postMessage(
-								postMsg,
-								decryptedToken,
-								slackSettings.slack_channel_id
-							);
-						}
-					}
-				} catch (slackError) {
-					console.error("Slack へのメッセージ投稿に失敗しました:", slackError);
-				}
-			}
-
-			await this.broadcastData();
+			await this.writeLog(studentID);
 		} catch (error) {
 			console.error("ログ書き込みまたはブロードキャストエラー (handleLogWrite):", error, JSON.stringify(data.payload));
 			sendWsMessage(ws, {
@@ -230,6 +236,55 @@ export class MessageHandler {
 					result: false,
 					content: [],
 					message: `ログ書き込み失敗: ${error instanceof Error ? error.message : "不明なエラー"}`,
+				},
+			});
+		}
+	}
+
+	private async handleDebugNfcStatus(ws: WebSocket): Promise<void> {
+		if (!this.ensureAdminAuthorized(ws, "debug/nfc/status")) {
+			return;
+		}
+
+		sendWsMessage(ws, {
+			type: "debug/nfc/status",
+			payload: {
+				result: true,
+				content: [{ enabled: isDebugAdminEnabled() }],
+				message: isDebugAdminEnabled() ? "仮想NFCリーダーが有効です" : "仮想NFCリーダーは無効です",
+			},
+		});
+	}
+
+	private async handleDebugNfcRead(ws: WebSocket, data: TWsMessage): Promise<void> {
+		if (!this.ensureAdminAuthorized(ws, "debug/nfc/read")) {
+			return;
+		}
+
+		if (!isDebugAdminEnabled()) {
+			sendWsMessage(ws, {
+				type: "debug/nfc/read",
+				payload: { result: false, content: [], message: "デバッグモードが無効です" },
+			});
+			return;
+		}
+
+		try {
+			const payload = LogWritePayload.parse(data.payload);
+			const studentID = payload.content.student_ID;
+			await this.writeLog(studentID);
+			sendWsMessage(ws, {
+				type: "debug/nfc/read",
+				payload: { result: true, content: [{ student_ID: studentID }], message: "仮想NFC読み取り成功" },
+			});
+		} catch (error) {
+			console.error("仮想NFC読み取りエラー:", error, JSON.stringify(data.payload));
+			sendWsMessage(ws, {
+				type: "debug/nfc/read",
+				payload: {
+					result: false,
+					content: [],
+					message: `仮想NFC読み取り失敗: ${error instanceof Error ? error.message : "不明なエラー"}`,
 				},
 			});
 		}

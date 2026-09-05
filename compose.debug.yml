@@ -4,3 +4,8 @@ services:
       DEBUG_ADMIN_ENABLED: "true"
       DEBUG_ADMIN_USER: ${DEBUG_ADMIN_USER:-test-user}
       DEBUG_ADMIN_PASSWORD: ${DEBUG_ADMIN_PASSWORD:-test-password}
+
+  # 実機USBリーダーに依存しないデバッグ構成では起動しない。
+  # 実機も併用する場合は COMPOSE_PROFILES=hardware を指定する。
+  nfc:
+    profiles: [hardware]

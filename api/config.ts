@@ -64,6 +64,8 @@ export type TWsProcessType =
 	| "admin/backup/create"
 	| "admin/backup/list"
 	| "admin/backup/restore"
+	| "debug/nfc/status"
+	| "debug/nfc/read"
 	| "slackBot/post";
 export type TWsPayLoad = {
 	result:boolean,

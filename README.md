@@ -77,8 +77,10 @@ just watch
 デバッグ管理者ログインを有効にして起動する場合:
 
 ```bash
-docker compose -f compose.yaml up -d --build
+docker compose -f compose.yaml -f compose.debug.yml up -d --build
 ```
+
+この構成では実機NFCリーダーのコンテナは起動せず、管理者ページに仮想NFCリーダーを表示します。実機も併用する場合は `COMPOSE_PROFILES=hardware` を付けて起動してください。
 
 LWS では `web` サービスの `80` 番ポートが公開され、Nginx から API にプロキシされます。
 

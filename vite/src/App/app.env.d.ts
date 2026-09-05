@@ -30,7 +30,9 @@ export type TWsProcessType =
 	| "admin/slack/update"
 	| "admin/backup/create"
 	| "admin/backup/list"
-	| "admin/backup/restore";
+	| "admin/backup/restore"
+	| "debug/nfc/status"
+	| "debug/nfc/read";
 export type TWsPayLoad = {
 	result: boolean,
 	content: undefined | Record<string, any>[],

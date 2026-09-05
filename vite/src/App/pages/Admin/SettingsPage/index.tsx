@@ -10,6 +10,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import BackupManagerPanel from "./BackupManagerPanel";
 import EditableDataTable from "./EditableDataTable";
 import SlackSettingsPanel from "./SlackSettingsPanel";
+import VirtualNfcReaderPanel from "./VirtualNfcReaderPanel";
 
 
 function SettingsPage() {
@@ -67,6 +68,7 @@ function SettingsPage() {
 						<Heading size={["lg", null, "2xl"]}>管理者用ページ</Heading>
 						<Text fontSize={["sm", null, "md"]}>ここはログイン済みのユーザーのみアクセス可能です。</Text>
 						<EditableDataTable/>
+						<VirtualNfcReaderPanel />
 						<SlackSettingsPanel />
 						<BackupManagerPanel />
 					</Box>
