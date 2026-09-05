@@ -56,6 +56,24 @@ cp .env.example .env
 docker compose -f compose.yaml up -d --build
 ```
 
+この構成はLWS配信用と同じ本番構成です。ソースコードやホストの設定ディレクトリをbind mountせず、永続データはnamed volumeに保存します。
+
+### 開発環境
+
+開発時は本番構成に`compose.dev.yml`を重ね、Compose Watchでソースコードをコンテナへ同期します。bind mountは使用しません。
+
+```bash
+docker compose -f compose.yaml -f compose.dev.yml up --build --watch
+```
+
+またはjustを使用できます。
+
+```bash
+just watch
+```
+
+開発時はVite開発サーバーを`http://localhost:4000`で利用します。依存関係ファイルを変更した場合は対象イメージが自動で再ビルドされます。
+
 デバッグ管理者ログインを有効にして起動する場合:
 
 ```bash
@@ -74,7 +92,6 @@ LWS では `web` サービスの `80` 番ポートが公開され、Nginx から
 | `MYSQL_USER` | 任意 | `OruCa_user` | MySQL ユーザー名 |
 | `MYSQL_PASSWORD` | 任意 | `OruCa_user_pass` | MySQL ユーザーパスワード |
 | `MYSQL_ROOT_PASSWORD` | 任意 | `root` | MySQL root パスワード |
-| `APPDATA_ROOT` | 任意 | `../../appdata/oruca` | 永続データ保存先 |
 | `ADMIN_FIXED_PASSWORD` | 必須 | なし | 管理者ログインの固定パスワード |
 | `DEBUG_ADMIN_ENABLED` | 任意 | `false` | デバッグ管理者ログインを有効化するフラグ |
 | `DEBUG_ADMIN_USER` | 任意 | `test-user` | デバッグ管理者ユーザー名 |
@@ -85,15 +102,16 @@ LWS では `web` サービスの `80` 番ポートが公開され、Nginx から
 `ADMIN_FIXED_PASSWORD` は必須です。  
 `DEBUG_ADMIN_ENABLED=true` のときは `DEBUG_ADMIN_USER` / `DEBUG_ADMIN_PASSWORD` で管理画面ログインできます。  
 Slack通知は未設定でもアプリは起動します。  
-永続設定をソース外に置きたい場合は `${APPDATA_ROOT}/config/api.env` を作成すると、API コンテナ起動時に自動で読み込みます。
+本番・開発ともに、アプリケーションの設定は環境変数で渡します。機密値はLWSの環境変数設定または`.env`（リポジトリへコミットしない）で管理してください。
 
 ## 永続データの保存先
 
-- MySQL データ: `${APPDATA_ROOT}/mysql`
-- バックアップ保存先: `${APPDATA_ROOT}/backups`
-- 永続設定ファイル: `${APPDATA_ROOT}/config/api.env`
+本番Composeで作成されるnamed volumeは次のとおりです。
 
-`APPDATA_ROOT` の既定値は LWS のアプリ実行領域から見て `../../appdata/oruca` です。
+- `oruca_mysql_data`: MySQLデータ
+- `oruca_mysql_backups`: MySQLバックアップ
+- `oruca_api_runtime_config`: APIランタイム設定
+- `oruca_api_backups`: APIバックアップ
 これにより再ビルド後も DB データと設定を保持できます。
 
 ## デバイス要件

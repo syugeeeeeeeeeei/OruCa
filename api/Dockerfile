@@ -11,7 +11,8 @@ COPY tsconfig.json ./
 FROM base AS dev
 # 開発用依存関係も含めてインストール
 RUN yarn install --frozen-lockfile
-# ソースコードはバインドマウントされるため、ここではCOPYしない
+# Compose Watchの初期同期元としてイメージにもソースを含める
+COPY . .
 ENV PATH=/app/node_modules/.bin:$PATH
 CMD ["yarn", "start"]
 

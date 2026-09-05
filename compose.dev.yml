@@ -1,34 +1,74 @@
-# include ブロックは削除します
+# 開発専用override。ソースコードはbind mountせず、Compose Watchで同期する。
 services:
-  # 開発用 Vite (本番には存在しないサービスを追加)
+  # 本番用の静的配信コンテナは開発時には起動しない。
+  web:
+    profiles: [production]
+
   vite:
     build:
-      context: vite
+      context: ./vite
       dockerfile: Dockerfile
       target: dev
-    container_name: oruca-vite
-    volumes:
-      - ./vite:/app:rw
-      - /app/node_modules
     ports:
       - "4000:4000"
-    restart: no
-    networks:
-      - default 
+    restart: "no"
+    volumes:
+      - vite_node_modules:/app/node_modules
+    develop:
+      watch:
+        - action: sync
+          path: ./vite
+          target: /app
+          initial_sync: true
+          ignore:
+            - node_modules/
+            - dist/
+            - .vite/
+            - .env*
+        - action: rebuild
+          path: ./vite/package.json
+        - action: rebuild
+          path: ./vite/yarn.lock
 
-  # API (Dev Mode Override)
   api:
     build:
-      target: dev             # Devステージに変更
+      target: dev
+    command: ["yarn", "start"]
+    restart: "no"
     volumes:
-      - ./api:/app:rw         # ソースコードをマウント
-      - /app/node_modules     # コンテナ内のnode_modulesを守る
-      - ${APPDATA_ROOT:-../../appdata/oruca}/config:/app/runtime-config
-      - ${APPDATA_ROOT:-../../appdata/oruca}/backups:/backups
-    command: ["yarn", "start"] # devコマンド (ts-node-dev)
-    restart: no
+      - api_node_modules:/app/node_modules
+    develop:
+      watch:
+        - action: sync
+          path: ./api
+          target: /app
+          initial_sync: true
+          ignore:
+            - node_modules/
+            - dist/
+            - .env*
+            - "*.pem"
+            - "*.key"
+            - config.local.*
+        - action: rebuild
+          path: ./api/package.json
+        - action: rebuild
+          path: ./api/yarn.lock
 
-  # NFC (Dev Mode Override)
   nfc:
-    volumes:
-      - ./nfc:/app:rw         # Pythonスクリプトをマウント
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./nfc
+          target: /app
+          initial_sync: true
+          ignore:
+            - __pycache__/
+            - .env*
+            - "*.pyc"
+        - action: rebuild
+          path: ./nfc/requirements.txt
+
+volumes:
+  api_node_modules:
+  vite_node_modules:

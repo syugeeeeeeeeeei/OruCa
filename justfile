@@ -10,16 +10,19 @@ _default:
 set shell := ["bash", "-cu"]
 
 up:
-  @docker compose -f docker-compose.yml -f compose.dev.yml --env-file .env.example up -d --build
+  @docker compose -f compose.yaml -f compose.dev.yml --env-file .env.example up -d --build
+
+watch:
+  @docker compose -f compose.yaml -f compose.dev.yml --env-file .env.example up --build --watch
 
 down:
-  @docker compose -f docker-compose.yml -f compose.dev.yml --env-file .env.example down
+  @docker compose -f compose.yaml -f compose.dev.yml --env-file .env.example down
 
 up-dev-debug:
-  @docker compose -f docker-compose.yml -f compose.dev.yml -f compose.debug.yml --env-file .env.example up -d --build
+  @docker compose -f compose.yaml -f compose.dev.yml -f compose.debug.yml --env-file .env.example up --build --watch
 
 up-prod:
-  @docker compose -f docker-compose.yml --env-file .env.example up -d --build
+  @docker compose -f compose.yaml --env-file .env.example up -d --build
 
 # -----------------------------------------------------------------
 # 💾 Database Backup & Restore
